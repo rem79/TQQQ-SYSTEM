@@ -9,7 +9,7 @@ const CONFIG = {
     longPeriod: 200,
     chartPoints: 120,
     updateInterval: 600000,
-    dailyLimit: 800,
+    dailyLimit: 600,
     storageKey: 'tqqq_system_data_v4',
     maxHistoryPoints: 5000
 };
@@ -178,13 +178,14 @@ async function fetchCNNFearAndGreed() {
                     return { current: { value: Math.round(current.score), status: current.rating.toUpperCase() }, history: historyList };
                 }
 
-                // 2. HTML 형태인 경우 (페이지 스크래핑)
+                // 2. HTML 형태인 경우 (페이지 스크래핑 강화)
                 if (typeof data === 'string' && data.includes('<html')) {
-                    // "score":36.123 형태의 JSON 데이터를 HTML 내부에서 찾음
-                    const match = data.match(/"fear_and_greed":\s*\{"score":\s*([\d.]+)/);
+                    // 방법 A: meta 태그 또는 스크립트 태그 분석
+                    const match = data.match(/"fear_and_greed":\s*\{"score":\s*([\d.]+)/) ||
+                        data.match(/score\\":([\d.]+)/);
                     if (match && match[1]) {
                         const score = Math.round(parseFloat(match[1]));
-                        const ratingMatch = data.match(/"rating":\s*"([^"]+)"/);
+                        const ratingMatch = data.match(/"rating":\s*"([^"]+)"/) || data.match(/rating\\":\\"([^"\\]+)/);
                         const rating = ratingMatch ? ratingMatch[1].toUpperCase() : "NEUTRAL";
 
                         if (statusEl) statusEl.innerText = "ONLINE";
@@ -200,7 +201,7 @@ async function fetchCNNFearAndGreed() {
 
     // 최종 실패
     if (statusEl) statusEl.innerText = "OFFLINE";
-    if (sourceEl) sourceEl.innerText = "모든 우회 경로가 차단되었습니다. 잠시 후 실시간 버튼을 눌러보세요.";
+    if (sourceEl) sourceEl.innerText = "CNN 보안 벽이 매우 높습니다. 브라우저에서 직접 CNN(markets/fear-and-greed) 페이지를 한 번 열었다가 닫으신 후 '실시간 갱신'을 눌러보세요.";
     return null;
 }
 
@@ -277,7 +278,11 @@ function processIntegratedData() {
 }
 
 // --- 실행 제어 ---
+let mainTimerId = null;
+
 async function startSystem() {
+    if (mainTimerId) clearTimeout(mainTimerId);
+
     const statusEl = document.getElementById('phase-description');
     calculateSmartInterval();
 
@@ -297,15 +302,14 @@ async function startSystem() {
         if (missingSymbols.length > 0) {
             await initialFullLoad(missingSymbols);
         } else {
-            if (Date.now() - assetStore.lastUpdate > CONFIG.updateInterval) updateLive();
+            // 마지막 업데이트로부터 주기가 지났으면 즉시 실행
+            if (Date.now() - assetStore.lastUpdate > CONFIG.updateInterval) {
+                await updateLive();
+            }
         }
     } else {
         await initialFullLoad();
     }
-
-    setInterval(() => {
-        if (Date.now() - assetStore.lastUpdate > CONFIG.updateInterval) updateLive();
-    }, 60000);
 }
 
 async function initialFullLoad(targetSymbols = CONFIG.symbols) {
@@ -597,7 +601,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 시스템 시작 (데이터 로드 및 타이머 설정 포함)
-    startSystem();
+    runSystemCycle();
 
     // 버튼 이벤트 연결
     document.getElementById('export-btn').onclick = exportData;
@@ -608,3 +612,16 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('full-history-container').classList.toggle('hidden');
     };
 });
+
+/**
+ * setInterval 대신 setTimeout을 사용하여 동적인 갱신 간격을 보장합니다.
+ */
+let cycleTimerManual = null;
+async function runSystemCycle() {
+    if (cycleTimerManual) clearTimeout(cycleTimerManual);
+
+    await startSystem();
+
+    console.log(`Next update scheduled in ${CONFIG.updateInterval / 1000}s`);
+    cycleTimerManual = setTimeout(runSystemCycle, CONFIG.updateInterval);
+}
