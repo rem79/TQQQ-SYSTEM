@@ -88,17 +88,13 @@ async function fetchWithRetry(url, retries = 3, backoff = 2000) {
 }
 
 async function fetchHistory(symbol) {
-    try {
-        const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1day&outputsize=${CONFIG.maxHistoryPoints}&apikey=${CONFIG.apiKey}`;
-        const data = await fetchWithRetry(url);
-        return data.values.reverse().map(item => ({
-            date: item.datetime,
-            close: parseFloat(item.close)
-        }));
-    } catch (e) {
-        console.error(`History load fail [${symbol}]:`, e);
-        return [];
-    }
+    const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1day&outputsize=${CONFIG.maxHistoryPoints}&apikey=${CONFIG.apiKey}`;
+    const data = await fetchWithRetry(url);
+    if (!data.values) throw new Error(`[${symbol}] 데이터를 찾을 수 없습니다.`);
+    return data.values.reverse().map(item => ({
+        date: item.datetime,
+        close: parseFloat(item.close)
+    }));
 }
 
 async function fetchRealtimeQuotes() {
@@ -492,7 +488,7 @@ function initSettingsUI() {
                 CONFIG.apiKey = newKey;
                 modal.style.display = 'none';
                 alert("API 키가 저장되었습니다. 데이터를 불러옵니다.");
-                updateAll();
+                startSystem(); // 즉시 데이터 로딩 시작
                 checkApiKey(); // 경고바 업데이트
             } else {
                 alert("키를 입력해주세요.");
@@ -532,9 +528,8 @@ document.addEventListener('DOMContentLoaded', () => {
         renderAll();
     }
 
-    // 첫 실행 및 타이머
-    updateAll();
-    setInterval(updateAll, CONFIG.updateInterval);
+    // 시스템 시작 (데이터 로드 및 타이머 설정 포함)
+    startSystem();
 
     // 버튼 연결
     document.getElementById('export-btn').onclick = exportData;
