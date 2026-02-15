@@ -18,6 +18,9 @@
                 <span>TQQQ SYSTEM</span>
             </div>
             <div class="header-controls">
+                <button id="settings-btn" class="btn btn-secondary" title="API 키 설정">
+                    <i data-lucide="key"></i>
+                </button>
                 <button id="export-btn" class="btn btn-secondary" title="데이터를 JSON 파일로 내보내기">
                     <i data-lucide="download"></i> 백업
                 </button>
@@ -158,6 +161,25 @@
         </footer>
 
     </div>
+    <!-- API 설정 모달 -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <h3>Twelve Data API 설정</h3>
+            <p>데이터 갱신을 위해 사용자님의 API 키가 필요합니다.</p>
+            <div class="input-group">
+                <label for="api-key-input">API Key</label>
+                <input type="text" id="api-key-input" placeholder="키를 입력하세요 (예: c1c4d...)" spellcheck="false">
+            </div>
+            <div class="modal-hint">
+                * 키는 브라우저(`localStorage`)에만 안전하게 저장됩니다.
+            </div>
+            <div class="modal-actions">
+                <button id="save-key-btn" class="btn btn-primary">저장하기</button>
+                <button id="close-settings-btn" class="btn btn-secondary">닫기</button>
+            </div>
+        </div>
+    </div>
+
     <script src="strategy.js"></script>
     <script>
         lucide.createIcons();

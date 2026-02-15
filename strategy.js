@@ -3,7 +3,7 @@
  */
 
 const CONFIG = {
-    apiKey: 'c1c4d7b4fffc4f20bc9d789671b3f958',
+    apiKey: localStorage.getItem('tqqq_api_key') || '',
     symbols: ['QQQ', 'TQQQ', 'SPY', 'DIA', 'GLD', 'TLT', 'VXX'],
     shortPeriod: 100,
     longPeriod: 200,
@@ -443,29 +443,100 @@ function exportData() {
 function importData(event) {
     const file = event.target.files[0];
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = function (e) {
         try {
             const importedData = JSON.parse(e.target.result);
-            if (!importedData.data || !importedData.data.QQQ) throw new Error("유효한 백업 파일이 아닙니다.");
+            if (!importedData.data || !importedData.data.QQQ) {
+                throw new Error("유효한 백업 파일이 아닙니다.");
+            }
+
             if (confirm("기존 데이터를 덮어씌우고 백업 파일을 불러오시겠습니까?")) {
                 assetStore = importedData;
                 saveToLocal();
-                alert("데이터 복구가 완료되었습니다.");
+                alert("데이터 복구 성공! 화면을 새로고침합니다.");
                 window.location.reload();
             }
-        } catch (err) { alert("복구 실패: " + err.message); }
+        } catch (err) {
+            alert("복구 실패: " + err.message);
+        }
     };
     reader.readAsText(file);
 }
 
+// --- API 설정 및 보안 기능 ---
+function initSettingsUI() {
+    const modal = document.getElementById('settings-modal');
+    const settingsBtn = document.getElementById('settings-btn');
+    const closeBtn = document.getElementById('close-settings-btn');
+    const saveBtn = document.getElementById('save-key-btn');
+    const keyInput = document.getElementById('api-key-input');
+
+    if (settingsBtn) {
+        settingsBtn.onclick = () => {
+            keyInput.value = CONFIG.apiKey;
+            modal.style.display = 'block';
+        };
+    }
+
+    if (closeBtn) {
+        closeBtn.onclick = () => modal.style.display = 'none';
+    }
+
+    if (saveBtn) {
+        saveBtn.onclick = () => {
+            const newKey = keyInput.value.trim();
+            if (newKey) {
+                localStorage.setItem('tqqq_api_key', newKey);
+                CONFIG.apiKey = newKey;
+                modal.style.display = 'none';
+                alert("API 키가 저장되었습니다. 데이터를 불러옵니다.");
+                updateAll();
+                checkApiKey(); // 경고바 업데이트
+            } else {
+                alert("키를 입력해주세요.");
+            }
+        };
+    }
+
+    window.onclick = (event) => {
+        if (event.target == modal) modal.style.display = 'none';
+    };
+
+    checkApiKey();
+}
+
+function checkApiKey() {
+    const existingWarning = document.querySelector('.api-warning-bar');
+    if (existingWarning) existingWarning.remove();
+
+    if (!CONFIG.apiKey) {
+        const warning = document.createElement('div');
+        warning.className = 'api-warning-bar';
+        warning.innerText = "⚠ Twelve Data API 키가 설정되지 않았습니다. 여기를 클릭하여 설정하세요.";
+        warning.onclick = () => document.getElementById('settings-btn').click();
+        document.body.prepend(warning);
+    }
+}
+
+// --- 초기화 ---
 document.addEventListener('DOMContentLoaded', () => {
-    startSystem();
-    document.getElementById('manual-update-btn').addEventListener('click', updateLive);
-    document.getElementById('toggle-full-history').addEventListener('click', () => {
-        document.getElementById('full-history-container').classList.toggle('hidden');
-    });
-    document.getElementById('export-btn').addEventListener('click', exportData);
-    document.getElementById('import-btn').addEventListener('click', () => document.getElementById('import-input').click());
-    document.getElementById('import-input').addEventListener('change', importData);
+    initSettingsUI();
+    lucide.createIcons();
+    calculateSmartInterval();
+
+    // 로컬 데이터 로드 시도
+    if (loadFromLocal()) {
+        console.log("Local data loaded.");
+        renderAll();
+    }
+
+    // 첫 실행 및 타이머
+    updateAll();
+    setInterval(updateAll, CONFIG.updateInterval);
+
+    // 버튼 연결
+    document.getElementById('export-btn').onclick = exportData;
+    document.getElementById('import-input').onchange = importData;
 });
