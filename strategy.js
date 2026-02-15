@@ -216,6 +216,12 @@ async function startSystem() {
     const statusEl = document.getElementById('phase-description');
     calculateSmartInterval();
 
+    if (!CONFIG.apiKey) {
+        if (statusEl) statusEl.innerText = "🔑 API 키 설정을 먼저 완료해 주세요.";
+        checkApiKey();
+        return;
+    }
+
     if (loadFromLocal() && assetStore.data.QQQ) {
         statusEl.innerText = "📁 로컬 데이터를 불러왔습니다. 부족한 데이터를 보충합니다...";
         globalStrategyResults = processIntegratedData();
@@ -519,13 +525,11 @@ function checkApiKey() {
 // --- 초기화 ---
 document.addEventListener('DOMContentLoaded', () => {
     initSettingsUI();
-    lucide.createIcons();
-    calculateSmartInterval();
-
     // 로컬 데이터 로드 시도
     if (loadFromLocal()) {
         console.log("Local data loaded.");
-        renderAll();
+        globalStrategyResults = processIntegratedData();
+        renderDashboard(globalStrategyResults);
     }
 
     // 시스템 시작 (데이터 로드 및 타이머 설정 포함)
