@@ -131,8 +131,9 @@ async function fetchCNNFearAndGreed() {
     const statusEl = document.getElementById('fng-status');
     const cnnUrl = 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata/';
 
-    // 신뢰도 높은 프록시 순서
+    // 더 강력하고 다양한 프록시 순서
     const proxies = [
+        url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
         url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
         url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
         url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
@@ -143,12 +144,12 @@ async function fetchCNNFearAndGreed() {
             if (statusEl) statusEl.innerText = `TRYING ${i + 1}...`;
             const finalUrl = proxies[i](cnnUrl);
 
-            const response = await fetchWithTimeout(finalUrl, 7000); // 프록시당 7초 제한
+            const response = await fetchWithTimeout(finalUrl, 8000);
             if (!response.ok) continue;
 
             let data = await response.json();
 
-            // AllOrigins wrapper 처리
+            // 프록시별 래퍼 처리 (AllOrigins 등)
             if (data.contents) {
                 try {
                     data = typeof data.contents === 'string' ? JSON.parse(data.contents) : data.contents;
@@ -166,45 +167,21 @@ async function fetchCNNFearAndGreed() {
                     })) : [];
 
                 if (statusEl) statusEl.innerText = "ONLINE";
+                console.log(`[F&G] Real data loaded via proxy ${i + 1}`);
                 return {
                     current: { value: Math.round(current.score), status: current.rating.toUpperCase() },
                     history: historyList
                 };
             }
         } catch (e) {
-            console.warn(`[F&G] Proxy ${i + 1} timeout/error:`, e.message);
+            console.warn(`[F&G] Proxy ${i + 1} failed:`, e.message);
         }
     }
 
-    // 최종 실패 시 가상 데이터 생성
-    if (statusEl) statusEl.innerText = "ESTIMATED";
-    return generateSyntheticFnG();
-}
-
-/**
- * CNN 차단 시 VXX(변동성) 기반으로 공포 지수를 추정합니다.
- */
-function generateSyntheticFnG() {
-    const vxxData = assetStore.data['VXX'] || [];
-    if (vxxData.length === 0) return null;
-
-    const latestVXX = vxxData[vxxData.length - 1].close;
-    // 단순 추정: VXX가 낮으면 탐욕(70), 높으면 공포(20)
-    // VXX 평균 15 내외 가정 (실제로는 유동적)
-    let estimatedScore = 50;
-    if (latestVXX < 12) estimatedScore = 75;
-    else if (latestVXX > 25) estimatedScore = 20;
-    else estimatedScore = Math.max(10, Math.min(90, 100 - (latestVXX * 3)));
-
-    const status = estimatedScore < 25 ? "EXTREME FEAR" : (estimatedScore < 45 ? "FEAR" : (estimatedScore < 55 ? "NEUTRAL" : (estimatedScore < 75 ? "GREED" : "EXTREME GREED")));
-
-    // 히스토리도 현재 기준 평탄화하여 생성 (오류 방지용)
-    const history = vxxData.map(d => ({ date: d.date, value: estimatedScore }));
-
-    return {
-        current: { value: Math.round(estimatedScore), status: status },
-        history: history
-    };
+    // 최종 실패 시: 추정 없이 실패 처리 (사용자 요청)
+    console.warn("[F&G] All proxies failed. Estimation disabled by user.");
+    if (statusEl) statusEl.innerText = "OFFLINE";
+    return null;
 }
 
 // --- 분석 로직 ---
