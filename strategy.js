@@ -64,44 +64,63 @@ function loadFromLocal() {
     return false;
 }
 
-// --- API 통신 (강인한 로딩 모드) ---
-async function fetchWithRetry(url, retries = 3, backoff = 2000) {
+// --- API 통신 유틸리티 (타임아웃 및 재시도) ---
+async function fetchWithTimeout(url, timeout = 10000) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    try {
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(id);
+        return response;
+    } catch (e) {
+        clearTimeout(id);
+        throw e;
+    }
+}
+
+async function fetchWithRetry(url, retries = 2, timeout = 10000) {
     for (let i = 0; i < retries; i++) {
         try {
-            const response = await fetch(url);
+            const response = await fetchWithTimeout(url, timeout);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = await response.json();
+
             if (data.status === 'error') {
                 if (data.code === 429) {
-                    console.warn("API Rate Limit hit, waiting longer...");
-                    await new Promise(r => setTimeout(r, backoff * (i + 1)));
+                    console.warn("Rate Limit hit, retrying after delay...");
+                    await new Promise(r => setTimeout(r, 3000 * (i + 1)));
                     continue;
                 }
-                throw new Error(data.message);
+                throw new Error(data.message || "Unknown API Error");
             }
             return data;
         } catch (e) {
+            console.error(`Fetch attempt ${i + 1} failed:`, e.message);
             if (i === retries - 1) throw e;
-            await new Promise(r => setTimeout(r, backoff));
+            await new Promise(r => setTimeout(r, 1000));
         }
     }
 }
 
 async function fetchHistory(symbol) {
     const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1day&outputsize=${CONFIG.maxHistoryPoints}&apikey=${CONFIG.apiKey}`;
-    const data = await fetchWithRetry(url);
-    if (!data.values) throw new Error(`[${symbol}] 데이터를 찾을 수 없습니다.`);
-    return data.values.reverse().map(item => ({
-        date: item.datetime,
-        close: parseFloat(item.close)
-    }));
+    try {
+        const data = await fetchWithRetry(url);
+        if (!data.values || data.values.length === 0) throw new Error(`[${symbol}] No values returned`);
+        return data.values.reverse().map(item => ({
+            date: item.datetime,
+            close: parseFloat(item.close)
+        }));
+    } catch (e) {
+        throw new Error(`[${symbol}] 로딩 실패: ${e.message}`);
+    }
 }
 
 async function fetchRealtimeQuotes() {
     const symbolsStr = CONFIG.symbols.join(',');
     const url = `https://api.twelvedata.com/quote?symbol=${symbolsStr}&apikey=${CONFIG.apiKey}`;
     try {
-        return await fetchWithRetry(url, 2, 1000);
+        return await fetchWithRetry(url, 1, 5000); // 실시간은 더 짧고 빠르게
     } catch (e) {
         console.error("Quotes load fail:", e);
         return null;
@@ -111,6 +130,8 @@ async function fetchRealtimeQuotes() {
 async function fetchCNNFearAndGreed() {
     const statusEl = document.getElementById('fng-status');
     const cnnUrl = 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata/';
+
+    // 신뢰도 높은 프록시 순서
     const proxies = [
         url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
         url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
@@ -119,19 +140,18 @@ async function fetchCNNFearAndGreed() {
 
     for (let i = 0; i < proxies.length; i++) {
         try {
+            if (statusEl) statusEl.innerText = `TRYING ${i + 1}...`;
             const finalUrl = proxies[i](cnnUrl);
-            if (statusEl) statusEl.innerText = `PROXY ${i + 1}...`;
 
-            const response = await fetch(finalUrl);
+            const response = await fetchWithTimeout(finalUrl, 7000); // 프록시당 7초 제한
             if (!response.ok) continue;
 
-            let rawData = await response.json();
-            let data = rawData;
+            let data = await response.json();
 
             // AllOrigins wrapper 처리
-            if (rawData.contents) {
+            if (data.contents) {
                 try {
-                    data = typeof rawData.contents === 'string' ? JSON.parse(rawData.contents) : rawData.contents;
+                    data = typeof data.contents === 'string' ? JSON.parse(data.contents) : data.contents;
                 } catch (e) { continue; }
             }
 
@@ -139,33 +159,25 @@ async function fetchCNNFearAndGreed() {
                 const current = data.fear_and_greed;
                 const historical = data.fear_and_greed_historical;
 
-                const historyList = [];
-                if (historical && historical.timestamp && historical.data) {
-                    for (let j = 0; j < historical.timestamp.length; j++) {
-                        const dateObj = new Date(historical.timestamp[j]);
-                        const dateStr = dateObj.toISOString().split('T')[0];
-                        historyList.push({ date: dateStr, value: Math.round(historical.data[j]) });
-                    }
-                }
+                const historyList = (historical && historical.timestamp) ?
+                    historical.timestamp.map((t, idx) => ({
+                        date: new Date(t).toISOString().split('T')[0],
+                        value: Math.round(historical.data[idx])
+                    })) : [];
 
-                console.log("[F&G] Data loaded successfully via proxy", i + 1);
+                if (statusEl) statusEl.innerText = "ONLINE";
                 return {
-                    current: {
-                        value: Math.round(current.score),
-                        status: current.rating.toUpperCase()
-                    },
+                    current: { value: Math.round(current.score), status: current.rating.toUpperCase() },
                     history: historyList
                 };
             }
         } catch (e) {
-            console.warn(`[F&G] Proxy ${i + 1} failed:`, e.message);
+            console.warn(`[F&G] Proxy ${i + 1} timeout/error:`, e.message);
         }
     }
 
-    // 모든 시도 실패 시: VIX(VXX) 기반 가상 지표 생성 (UI 멈춤 방지)
-    console.error("[F&G] All proxies failed. Generating synthetic data based on VXX.");
+    // 최종 실패 시 가상 데이터 생성
     if (statusEl) statusEl.innerText = "ESTIMATED";
-
     return generateSyntheticFnG();
 }
 
@@ -258,7 +270,8 @@ function processIntegratedData() {
         };
 
         CONFIG.symbols.forEach(s => {
-            row[s] = assetMaps[s][date] || null;
+            // 날짜가 정확히 일치하지 않는 경우를 대비한 Fallback (데이터 누락 방지)
+            row[s] = assetMaps[s][date] || (i > 0 ? integrated[i - 1][s] : null);
         });
 
         integrated.push(row);
