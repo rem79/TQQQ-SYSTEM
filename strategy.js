@@ -525,6 +525,7 @@ function checkApiKey() {
 // --- 초기화 ---
 document.addEventListener('DOMContentLoaded', () => {
     initSettingsUI();
+
     // 로컬 데이터 로드 시도
     if (loadFromLocal()) {
         console.log("Local data loaded.");
@@ -535,7 +536,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // 시스템 시작 (데이터 로드 및 타이머 설정 포함)
     startSystem();
 
-    // 버튼 연결
+    // 버튼 이벤트 연결
     document.getElementById('export-btn').onclick = exportData;
+    document.getElementById('import-btn').onclick = () => document.getElementById('import-input').click();
     document.getElementById('import-input').onchange = importData;
+    document.getElementById('manual-update-btn').onclick = updateLive;
+    document.getElementById('toggle-full-history').onclick = () => {
+        document.getElementById('full-history-container').classList.toggle('hidden');
+    };
 });
