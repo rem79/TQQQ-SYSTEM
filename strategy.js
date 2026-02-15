@@ -129,27 +129,30 @@ async function fetchRealtimeQuotes() {
 
 async function fetchCNNFearAndGreed() {
     const statusEl = document.getElementById('fng-status');
+    const sourceEl = document.getElementById('fng-source');
     const cnnUrl = 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata/';
 
-    // 더 강력하고 다양한 프록시 순서
+    // 검증된 4단계 프록시 우회 전략
     const proxies = [
-        url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-        url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-        url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-        url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+        { name: 'CORSProxy.io', fn: url => `https://corsproxy.io/?${encodeURIComponent(url)}` },
+        { name: 'AllOrigins(G)', fn: url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}` },
+        { name: 'CodeTabs', fn: url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}` },
+        { name: 'AllOrigins(R)', fn: url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` }
     ];
+
+    if (sourceEl) sourceEl.innerText = "";
 
     for (let i = 0; i < proxies.length; i++) {
         try {
-            if (statusEl) statusEl.innerText = `TRYING ${i + 1}...`;
-            const finalUrl = proxies[i](cnnUrl);
+            if (statusEl) statusEl.innerText = `PROXY ${i + 1}...`;
+            const finalUrl = proxies[i].fn(cnnUrl);
 
             const response = await fetchWithTimeout(finalUrl, 8000);
             if (!response.ok) continue;
 
             let data = await response.json();
 
-            // 프록시별 래퍼 처리 (AllOrigins 등)
+            // AllOrigins wrapper 처리
             if (data.contents) {
                 try {
                     data = typeof data.contents === 'string' ? JSON.parse(data.contents) : data.contents;
@@ -167,20 +170,22 @@ async function fetchCNNFearAndGreed() {
                     })) : [];
 
                 if (statusEl) statusEl.innerText = "ONLINE";
-                console.log(`[F&G] Real data loaded via proxy ${i + 1}`);
+                if (sourceEl) sourceEl.innerText = `출처: CNN Business (via ${proxies[i].name})`;
+
+                console.log(`[F&G] Success via ${proxies[i].name}`);
                 return {
                     current: { value: Math.round(current.score), status: current.rating.toUpperCase() },
                     history: historyList
                 };
             }
         } catch (e) {
-            console.warn(`[F&G] Proxy ${i + 1} failed:`, e.message);
+            console.warn(`[F&G] ${proxies[i].name} failed:`, e.message);
         }
     }
 
-    // 최종 실패 시: 추정 없이 실패 처리 (사용자 요청)
-    console.warn("[F&G] All proxies failed. Estimation disabled by user.");
+    // 최종 실패 시 (사용자 요청: 추측 데이터 배제)
     if (statusEl) statusEl.innerText = "OFFLINE";
+    if (sourceEl) sourceEl.innerText = "수집 가능 경로를 모두 탐색했으나 차단되었습니다.";
     return null;
 }
 
