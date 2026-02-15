@@ -131,55 +131,55 @@ async function fetchCNNFearAndGreed() {
     const statusEl = document.getElementById('fng-status');
     const sourceEl = document.getElementById('fng-source');
 
-    // 수집 대상 후보 (API 및 신뢰할 수 있는 데이터셋)
-    const targets = [
-        { name: 'CNN API', url: 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata/' },
-        { name: 'GitHub Mirror', url: 'https://raw.githubusercontent.com/whit3rabbit/fear-greed-data/main/json/cnn_fear_greed_data.json' }
-    ];
+    // 오직 CNN 메인 웹페이지 하나만 타겟으로 삼습니다. (사용자 요청)
+    const targetUrl = 'https://edition.cnn.com/markets/fear-and-greed';
 
     const proxies = [
         { name: 'CORSProxy.io', fn: url => `https://corsproxy.io/?${encodeURIComponent(url)}` },
         { name: 'AllOrigins', fn: url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}` },
-        { name: 'CodeTabs', fn: url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}` }
+        { name: 'CodeTabs', fn: url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}` },
+        { name: 'ThinProxy', fn: url => `https://thingproxy.freeboard.io/fetch/${url}` }
     ];
 
     if (sourceEl) sourceEl.innerText = "";
 
-    for (let target of targets) {
-        for (let proxy of proxies) {
-            try {
-                if (statusEl) statusEl.innerText = `${target.name}...`;
-                const finalUrl = proxy.fn(target.url);
-                const response = await fetchWithTimeout(finalUrl, 8000);
-                if (!response.ok) continue;
+    for (let proxy of proxies) {
+        try {
+            if (statusEl) statusEl.innerText = "SCRAPING...";
+            const finalUrl = proxy.fn(targetUrl);
+            const response = await fetchWithTimeout(finalUrl, 10000); // 페이지 로드는 조금 더 시간을 줌
+            if (!response.ok) continue;
 
-                let raw = await response.json();
-                let data = raw.contents || raw;
-                if (typeof data === 'string' && data.startsWith('{')) {
-                    try { data = JSON.parse(data); } catch (e) { }
-                }
+            let raw = await response.json();
+            let html = raw.contents || raw; // AllOrigins 등 처리
 
-                if (data && data.fear_and_greed) {
-                    const current = data.fear_and_greed;
-                    const historical = data.fear_and_greed_historical;
-                    const historyList = (historical && historical.timestamp) ?
-                        historical.timestamp.map((t, idx) => ({
-                            date: new Date(t).toISOString().split('T')[0],
-                            value: Math.round(historical.data[idx])
-                        })) : [];
+            if (typeof html === 'string' && html.includes('<html')) {
+                // CNN은 페이지 내부 JSON에 데이터를 숨겨둡니다. (score: 36.5 등의 패턴)
+                const scoreMatch = html.match(/"score":\s*([\d.]+)/) || html.match(/score\\":([\d.]+)/);
+                if (scoreMatch && scoreMatch[1]) {
+                    const score = Math.round(parseFloat(scoreMatch[1]));
+
+                    // 상태 파싱 (Greed, Fear 등)
+                    const ratingMatch = html.match(/"rating":\s*"([^"]+)"/) || html.match(/rating\\":\\"([^"\\]+)/);
+                    const rating = ratingMatch ? ratingMatch[1].toUpperCase() : "NEUTRAL";
 
                     if (statusEl) statusEl.innerText = "ONLINE";
-                    if (sourceEl) sourceEl.innerText = `출처: ${target.name} (via ${proxy.name})`;
-                    return { current: { value: Math.round(current.score), status: current.rating.toUpperCase() }, history: historyList };
+                    if (sourceEl) sourceEl.innerText = `출처: CNN Markets (Live Scraped via ${proxy.name})`;
+                    console.log(`[F&G] Scrape Success via ${proxy.name}: ${score} (${rating})`);
+
+                    return {
+                        current: { value: score, status: rating },
+                        history: [] // 페이지 스크래핑은 히스토리가 누락될 수 있음
+                    };
                 }
-            } catch (e) {
-                console.warn(`[F&G] ${target.name} via ${proxy.name} failed:`, e.message);
             }
+        } catch (e) {
+            console.warn(`[F&G] Scrape via ${proxy.name} failed:`, e.message);
         }
     }
 
     if (statusEl) statusEl.innerText = "OFFLINE";
-    if (sourceEl) sourceEl.innerText = "공식 API 통신에 실패했습니다. (스크래핑 미사용)";
+    if (sourceEl) sourceEl.innerText = "CNN 페이지 접근이 모두 차단되었습니다. 수동 확인을 권장합니다.";
     return null;
 }
 
