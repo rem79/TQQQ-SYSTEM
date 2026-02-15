@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TQQQ SYSTEM - 데이터 전략 대시보드</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body class="dark-mode">
+    <div class="container">
+        <header>
+            <div class="logo">
+                <i data-lucide="trending-up"></i>
+                <span>TQQQ SYSTEM</span>
+            </div>
+            <div class="header-controls">
+                <button id="export-btn" class="btn btn-secondary" title="데이터를 JSON 파일로 내보내기">
+                    <i data-lucide="download"></i> 백업
+                </button>
+                <button id="import-btn" class="btn btn-secondary" title="백업된 JSON 파일 불러오기">
+                    <i data-lucide="upload"></i> 복구
+                </button>
+                <input type="file" id="import-input" accept=".json" style="display: none;">
+                <button id="manual-update-btn" class="btn btn-primary">
+                    <i data-lucide="refresh-cw"></i> 실시간 갱신 (크레딧 사용)
+                </button>
+                <div class="last-update">
+                    <div>최근 업데이트: <span id="update-time">-</span></div>
+                    <div class="smart-interval-hint">지능형 갱신 주기: <span id="smart-interval-val">-</span></div>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <!-- 상단 요약 정보 -->
+            <section class="status-grid">
+                <div class="card phase-card" id="phase-card">
+                    <h3>현재 페이즈</h3>
+                    <div class="phase-badge" id="current-phase">데이터 로딩 중...</div>
+                    <p class="phase-desc" id="phase-description">-</p>
+                </div>
+                <div class="card price-card tqqq-border">
+                    <h3>TQQQ 현재가 (투자)</h3>
+                    <div class="price-value" id="tqqq-price">$ -</div>
+                    <div class="change-info" id="tqqq-change-container">전일대비: <span id="tqqq-change">-</span></div>
+                </div>
+                <div class="card price-card qqq-border">
+                    <h3>QQQ 현재가 (신호)</h3>
+                    <div class="price-value" id="qqq-price">$ -</div>
+                    <div class="change-info" id="qqq-change-container">전일대비: <span id="qqq-change">-</span></div>
+                    <div class="ema-info">
+                        <span>SMA100 (신호선): <span id="sma100-val">-</span></span>
+                        <span>SMA200 (생명선): <span id="sma200-val">-</span></span>
+                    </div>
+                </div>
+                <div class="card price-card spy-border">
+                    <h3>SPY 현재가 (S&P 500)</h3>
+                    <div class="price-value" id="spy-price">$ -</div>
+                    <div class="change-info" id="spy-change-container">전일대비: <span id="spy-change">-</span></div>
+                </div>
+                <div class="card price-card dow-border">
+                    <h3>DIA 현재가 (DOW)</h3>
+                    <div class="price-value" id="dia-price">$ -</div>
+                    <div class="change-info" id="dia-change-container">전일대비: <span id="dia-change">-</span></div>
+                </div>
+                <div class="card price-card gld-border">
+                    <h3>GLD 현재가 (금)</h3>
+                    <div class="price-value" id="gld-price">$ -</div>
+                    <div class="change-info" id="gld-change-container">전일대비: <span id="gld-change">-</span></div>
+                </div>
+                <div class="card price-card tlt-border">
+                    <h3>TLT 현재가 (채권)</h3>
+                    <div class="price-value" id="tlt-price">$ -</div>
+                    <div class="change-info" id="tlt-change-container">전일대비: <span id="tlt-change">-</span></div>
+                </div>
+                <div class="card price-card vix-border">
+                    <h3>VXX (변동성 지표)</h3>
+                    <div class="price-value" id="vix-price">-</div>
+                    <div class="change-info" id="vix-status">VIX 대체 ETF 기반 측정</div>
+                </div>
+                <div class="card price-card fng-border" id="fng-card">
+                    <h3>공포와 탐욕 지수 (미국 주식)</h3>
+                    <div class="fng-value-container">
+                        <div class="price-value" id="fng-value">-</div>
+                        <div class="fng-status" id="fng-status">LOADING</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 차트 섹션: QQQ & TQQQ -->
+            <section class="chart-section card">
+                <div class="chart-header">
+                    <h3>QQQ 전략 차트 (매매 신호 기준)</h3>
+                    <div class="chart-legend">
+                        <span class="legend-item"><span class="color qqq"></span> QQQ 종가</span>
+                        <span class="legend-item"><span class="color sma100"></span> SMA 100</span>
+                        <span class="legend-item"><span class="color sma200"></span> SMA 200</span>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="qqqChart"></canvas>
+                </div>
+            </section>
+
+            <section class="chart-section card">
+                <div class="chart-header">
+                    <h3>TQQQ 자산 차트 (실제 투자 수익률)</h3>
+                    <div class="chart-legend">
+                        <span class="legend-item"><span class="color tqqq"></span> TQQQ 가격</span>
+                        <span class="legend-item"><span class="color sma100"></span> SMA 100</span>
+                        <span class="legend-item"><span class="color sma200"></span> SMA 200</span>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="tqqqChart"></canvas>
+                </div>
+            </section>
+
+            <!-- 매매 신호 이력 -->
+            <section class="history-section card">
+                <h3>최근 주요 매매 신호</h3>
+                <table id="signal-history">
+                    <thead>
+                        <tr>
+                            <th>날짜</th>
+                            <th>구분</th>
+                            <th>QQQ (신호)</th>
+                            <th>TQQQ (자산)</th>
+                            <th>페이즈</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- 데이터 행이 JS에 의해 주입됨 -->
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- 전체 매매 히스토리 (확장 뷰어) -->
+            <section class="max-history-section card">
+                <div class="section-header">
+                    <h3>전체 전략 히스토리 (최대 5,000일)</h3>
+                    <button id="toggle-full-history" class="btn btn-secondary">상세 보기 / 닫기</button>
+                </div>
+                <div id="full-history-container" class="history-scroll-container hidden">
+                    <table id="full-signal-history">
+                        <!-- 자바스크립트에 의해 동적으로 생성됨 -->
+                    </table>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>© 2026 TQQQ SYSTEM. 본 데이터는 Twelve Data API를 통해 실시간 제공되는 실제 주가이며, 투자 판단의 최종 책임은 본인에게 있습니다.</p>
+        </footer>
+
+    </div>
+    <script src="strategy.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,20 @@
+# TQQQ SYSTEM - Git Ignore
+
+# API 및 데이터 관련 (보안)
+*.json
+!package.json
+
+# 로그 및 OS 관련
+*.log
+.DS_Store
+Thumbs.db
+
+# 에디터 관련
+.vscode/
+.idea/
+.env
+
+# 기타 무거운 파일 또는 개인 파일
+*.bak
+*.tmp
+node_modules/
