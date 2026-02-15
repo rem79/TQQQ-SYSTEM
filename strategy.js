@@ -131,17 +131,16 @@ async function fetchCNNFearAndGreed() {
     const statusEl = document.getElementById('fng-status');
     const sourceEl = document.getElementById('fng-source');
 
-    // 수집 대상 후보 (API 중심)
+    // 수집 대상 후보 (API 및 신뢰할 수 있는 데이터셋)
     const targets = [
         { name: 'CNN API', url: 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata/' },
-        { name: 'GitHub Dataset', url: 'https://raw.githubusercontent.com/whit3rabbit/fear-greed-data/master/data/fear-greed-data.json' }
+        { name: 'GitHub Mirror', url: 'https://raw.githubusercontent.com/whit3rabbit/fear-greed-data/main/json/cnn_fear_greed_data.json' }
     ];
 
     const proxies = [
         { name: 'CORSProxy.io', fn: url => `https://corsproxy.io/?${encodeURIComponent(url)}` },
         { name: 'AllOrigins', fn: url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}` },
-        { name: 'CodeTabs', fn: url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}` },
-        { name: 'ThinProxy', fn: url => `https://thingproxy.freeboard.io/fetch/${url}` }
+        { name: 'CodeTabs', fn: url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}` }
     ];
 
     if (sourceEl) sourceEl.innerText = "";
