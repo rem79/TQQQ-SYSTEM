@@ -130,62 +130,77 @@ async function fetchRealtimeQuotes() {
 async function fetchCNNFearAndGreed() {
     const statusEl = document.getElementById('fng-status');
     const sourceEl = document.getElementById('fng-source');
-    const cnnUrl = 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata/';
 
-    // 검증된 4단계 프록시 우회 전략
+    // 수집 대상 후보 (API 및 메인 페이지)
+    const targets = [
+        { name: 'CNN API', url: 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata/' },
+        { name: 'CNN HTML', url: 'https://edition.cnn.com/markets/fear-and-greed' }
+    ];
+
+    // 프록시 서버 목록 (우회 성공률 순)
     const proxies = [
         { name: 'CORSProxy.io', fn: url => `https://corsproxy.io/?${encodeURIComponent(url)}` },
-        { name: 'AllOrigins(G)', fn: url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}` },
+        { name: 'AllOrigins', fn: url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}` },
         { name: 'CodeTabs', fn: url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}` },
-        { name: 'AllOrigins(R)', fn: url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` }
+        { name: 'ThinProxy', fn: url => `https://thingproxy.freeboard.io/fetch/${url}` }
     ];
 
     if (sourceEl) sourceEl.innerText = "";
 
-    for (let i = 0; i < proxies.length; i++) {
-        try {
-            if (statusEl) statusEl.innerText = `PROXY ${i + 1}...`;
-            const finalUrl = proxies[i].fn(cnnUrl);
+    for (let target of targets) {
+        for (let proxy of proxies) {
+            try {
+                if (statusEl) statusEl.innerText = `${target.name}...`;
+                const finalUrl = proxy.fn(target.url);
 
-            const response = await fetchWithTimeout(finalUrl, 8000);
-            if (!response.ok) continue;
+                const response = await fetchWithTimeout(finalUrl, 8000);
+                if (!response.ok) continue;
 
-            let data = await response.json();
+                let raw = await response.json();
+                let data = raw.contents || raw; // 프록시 래퍼 처리
 
-            // AllOrigins wrapper 처리
-            if (data.contents) {
-                try {
-                    data = typeof data.contents === 'string' ? JSON.parse(data.contents) : data.contents;
-                } catch (e) { continue; }
+                // 1. JSON 형태인 경우 (API 응답)
+                if (typeof data === 'string' && (data.includes('{"fear_and_greed"') || data.startsWith('{'))) {
+                    try { data = JSON.parse(data); } catch (e) { }
+                }
+
+                if (data && data.fear_and_greed) {
+                    const current = data.fear_and_greed;
+                    const historical = data.fear_and_greed_historical;
+                    const historyList = (historical && historical.timestamp) ?
+                        historical.timestamp.map((t, idx) => ({
+                            date: new Date(t).toISOString().split('T')[0],
+                            value: Math.round(historical.data[idx])
+                        })) : [];
+
+                    if (statusEl) statusEl.innerText = "ONLINE";
+                    if (sourceEl) sourceEl.innerText = `출처: CNN Business (via ${proxy.name})`;
+                    return { current: { value: Math.round(current.score), status: current.rating.toUpperCase() }, history: historyList };
+                }
+
+                // 2. HTML 형태인 경우 (페이지 스크래핑)
+                if (typeof data === 'string' && data.includes('<html')) {
+                    // "score":36.123 형태의 JSON 데이터를 HTML 내부에서 찾음
+                    const match = data.match(/"fear_and_greed":\s*\{"score":\s*([\d.]+)/);
+                    if (match && match[1]) {
+                        const score = Math.round(parseFloat(match[1]));
+                        const ratingMatch = data.match(/"rating":\s*"([^"]+)"/);
+                        const rating = ratingMatch ? ratingMatch[1].toUpperCase() : "NEUTRAL";
+
+                        if (statusEl) statusEl.innerText = "ONLINE";
+                        if (sourceEl) sourceEl.innerText = `출처: CNN Markets (Scraped via ${proxy.name})`;
+                        return { current: { value: score, status: rating }, history: [] };
+                    }
+                }
+            } catch (e) {
+                console.warn(`[F&G] ${target.name} via ${proxy.name} failed:`, e.message);
             }
-
-            if (data && data.fear_and_greed) {
-                const current = data.fear_and_greed;
-                const historical = data.fear_and_greed_historical;
-
-                const historyList = (historical && historical.timestamp) ?
-                    historical.timestamp.map((t, idx) => ({
-                        date: new Date(t).toISOString().split('T')[0],
-                        value: Math.round(historical.data[idx])
-                    })) : [];
-
-                if (statusEl) statusEl.innerText = "ONLINE";
-                if (sourceEl) sourceEl.innerText = `출처: CNN Business (via ${proxies[i].name})`;
-
-                console.log(`[F&G] Success via ${proxies[i].name}`);
-                return {
-                    current: { value: Math.round(current.score), status: current.rating.toUpperCase() },
-                    history: historyList
-                };
-            }
-        } catch (e) {
-            console.warn(`[F&G] ${proxies[i].name} failed:`, e.message);
         }
     }
 
-    // 최종 실패 시 (사용자 요청: 추측 데이터 배제)
+    // 최종 실패
     if (statusEl) statusEl.innerText = "OFFLINE";
-    if (sourceEl) sourceEl.innerText = "수집 가능 경로를 모두 탐색했으나 차단되었습니다.";
+    if (sourceEl) sourceEl.innerText = "모든 우회 경로가 차단되었습니다. 잠시 후 실시간 버튼을 눌러보세요.";
     return null;
 }
 
