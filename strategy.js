@@ -131,7 +131,10 @@ async function fetchCNNFearAndGreed() {
     const statusEl = document.getElementById('fng-status');
     const sourceEl = document.getElementById('fng-source');
 
-    // 3중 백업 타겟 (성공 가능성 높은 순으로 배치)
+    // 0. 수동 입력 값이 최근에 저장되어 있다면 우선 시도 (선택 사항)
+    // 여기서는 자동 수집을 먼저 시도하고 실패 시 수동 값을 안내하는 식으로 구현합니다.
+
+    // 3중 백업 타겟 (타임아웃 연장 및 캐시 방지 강화)
     const targets = [
         {
             name: 'CNN API',
@@ -151,7 +154,7 @@ async function fetchCNNFearAndGreed() {
         },
         {
             name: 'MacroMicro',
-            url: 'https://www.macromicro.me/charts/data/34',
+            url: `https://www.macromicro.me/charts/data/34?v=${Date.now()}`,
             parser: (data) => {
                 if (data && data.data && data.data[34]) {
                     const series = data.data[34].series[0].values;
@@ -164,9 +167,8 @@ async function fetchCNNFearAndGreed() {
         },
         {
             name: 'GitHub Mirror',
-            url: 'https://raw.githubusercontent.com/whit3rabbit/fear-greed-data/main/json/cnn_fear_greed_data.json',
+            url: `https://raw.githubusercontent.com/whit3rabbit/fear-greed-data/main/json/cnn_fear_greed_data.json?v=${Date.now()}`,
             parser: (data) => {
-                // GitHub 미러 데이터가 CNN API 구조와 동일한 경우
                 if (data && data.fear_and_greed) {
                     const current = data.fear_and_greed;
                     const historical = data.fear_and_greed_historical || {};
@@ -188,13 +190,14 @@ async function fetchCNNFearAndGreed() {
     ];
 
     if (sourceEl) sourceEl.innerText = "";
+    const FETCH_TIMEOUT = 12000; // 타임아웃 12초로 증대
 
     for (let target of targets) {
         for (let proxy of proxies) {
             try {
                 if (statusEl) statusEl.innerText = `${target.name}...`;
                 const finalUrl = proxy.fn(target.url);
-                const response = await fetchWithTimeout(finalUrl, 8000);
+                const response = await fetchWithTimeout(finalUrl, FETCH_TIMEOUT);
                 if (!response.ok) continue;
 
                 const raw = await response.json();
@@ -213,8 +216,18 @@ async function fetchCNNFearAndGreed() {
         }
     }
 
+    // 모든 자동 수집 실패 시 -> 로컬에 저장된 마지막 수동 입력 값 확인
+    const manualVal = localStorage.getItem('tqqq_manual_fng');
+    if (manualVal) {
+        const val = parseInt(manualVal);
+        const status = getFngStatus(val);
+        if (statusEl) statusEl.innerText = "MANUAL";
+        if (sourceEl) sourceEl.innerText = "출처: 사용자 수동 입력 (자동 수집 실패)";
+        return { current: { value: val, status: status }, history: assetStore.fngData || [] };
+    }
+
     if (statusEl) statusEl.innerText = "OFFLINE";
-    if (sourceEl) sourceEl.innerText = "모든 데이터 경로가 일시적으로 차단되었습니다. (3중 백업 실패)";
+    if (sourceEl) sourceEl.innerText = "자동 수집 차단됨. '설정(아이콘)'에서 직접 지수를 입력해 주세요.";
     return null;
 
     function getFngStatus(val) {
@@ -592,6 +605,19 @@ function initSettingsUI() {
 
     window.onclick = (event) => {
         if (event.target == modal) modal.style.display = 'none';
+    };
+
+    // 공포 지수 수동 적용 버튼 추가
+    document.getElementById('apply-fng-btn').onclick = async () => {
+        const val = document.getElementById('fng-manual-input').value;
+        if (val === "" || isNaN(val)) {
+            alert("0에서 100 사이의 숫자를 입력해 주세요.");
+            return;
+        }
+        localStorage.setItem('tqqq_manual_fng', val);
+        alert(`공포 지수 ${val}이(가) 수동 적용되었습니다. 시스템을 다시 불러옵니다.`);
+        updateLive();
+        document.getElementById('settings-btn').click(); // 모달 닫기 유도
     };
 
     checkApiKey();

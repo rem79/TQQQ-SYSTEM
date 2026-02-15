@@ -175,6 +175,15 @@
             <div class="modal-hint">
                 * 키는 브라우저(`localStorage`)에만 안전하게 저장됩니다.
             </div>
+            <div class="input-group" style="margin-top: 20px; border-top: 1px solid #444; pt: 15px;">
+                <label for="fng-manual-input">공포와 탐욕 지수 수동 입력</label>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                    <input type="number" id="fng-manual-input" min="0" max="100" placeholder="0-100 값 입력"
+                        style="flex: 1;">
+                    <button id="apply-fng-btn" class="btn btn-secondary">즉시 적용</button>
+                </div>
+                <div class="modal-hint" style="margin-top: 5px;">* 수집이 계속 'OFFLINE'일 때 직접 값을 입력해 보세요.</div>
+            </div>
             <div class="modal-actions">
                 <button id="save-key-btn" class="btn btn-primary">저장하기</button>
                 <button id="close-settings-btn" class="btn btn-secondary">닫기</button>
