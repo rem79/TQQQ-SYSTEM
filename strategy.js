@@ -109,27 +109,30 @@ async function fetchRealtimeQuotes() {
 }
 
 async function fetchCNNFearAndGreed() {
-    // 1단계: 여러 프록시 서버 후보 (CNN API 차단 우회용)
+    const statusEl = document.getElementById('fng-status');
     const cnnUrl = 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata/';
     const proxies = [
         url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
         url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-        url => `https://corsproxy.org/?${encodeURIComponent(url)}`
+        url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
     ];
 
-    for (let proxyFn of proxies) {
+    for (let i = 0; i < proxies.length; i++) {
         try {
-            const finalUrl = proxyFn(cnnUrl);
-            console.log(`[F&G] Fetching via proxy: ${finalUrl}`);
+            const finalUrl = proxies[i](cnnUrl);
+            if (statusEl) statusEl.innerText = `PROXY ${i + 1}...`;
 
             const response = await fetch(finalUrl);
             if (!response.ok) continue;
 
-            let data = await response.json();
+            let rawData = await response.json();
+            let data = rawData;
 
-            // 프록시마다 응답 형식이 다름 (contents 필드 유무 등)
-            if (data.contents) {
-                try { data = JSON.parse(data.contents); } catch (e) { /* 이미 객체일 수 있음 */ }
+            // AllOrigins wrapper 처리
+            if (rawData.contents) {
+                try {
+                    data = typeof rawData.contents === 'string' ? JSON.parse(rawData.contents) : rawData.contents;
+                } catch (e) { continue; }
             }
 
             if (data && data.fear_and_greed) {
@@ -138,14 +141,14 @@ async function fetchCNNFearAndGreed() {
 
                 const historyList = [];
                 if (historical && historical.timestamp && historical.data) {
-                    for (let i = 0; i < historical.timestamp.length; i++) {
-                        const dateObj = new Date(historical.timestamp[i]);
+                    for (let j = 0; j < historical.timestamp.length; j++) {
+                        const dateObj = new Date(historical.timestamp[j]);
                         const dateStr = dateObj.toISOString().split('T')[0];
-                        historyList.push({ date: dateStr, value: Math.round(historical.data[i]) });
+                        historyList.push({ date: dateStr, value: Math.round(historical.data[j]) });
                     }
                 }
 
-                console.log("[F&G] Data loaded successfully!");
+                console.log("[F&G] Data loaded successfully via proxy", i + 1);
                 return {
                     current: {
                         value: Math.round(current.score),
@@ -155,12 +158,41 @@ async function fetchCNNFearAndGreed() {
                 };
             }
         } catch (e) {
-            console.warn(`[F&G] Proxy attempt failed:`, e.message);
+            console.warn(`[F&G] Proxy ${i + 1} failed:`, e.message);
         }
     }
 
-    console.error("[F&G] All proxies failed to fetch CNN data.");
-    return null;
+    // 모든 시도 실패 시: VIX(VXX) 기반 가상 지표 생성 (UI 멈춤 방지)
+    console.error("[F&G] All proxies failed. Generating synthetic data based on VXX.");
+    if (statusEl) statusEl.innerText = "ESTIMATED";
+
+    return generateSyntheticFnG();
+}
+
+/**
+ * CNN 차단 시 VXX(변동성) 기반으로 공포 지수를 추정합니다.
+ */
+function generateSyntheticFnG() {
+    const vxxData = assetStore.data['VXX'] || [];
+    if (vxxData.length === 0) return null;
+
+    const latestVXX = vxxData[vxxData.length - 1].close;
+    // 단순 추정: VXX가 낮으면 탐욕(70), 높으면 공포(20)
+    // VXX 평균 15 내외 가정 (실제로는 유동적)
+    let estimatedScore = 50;
+    if (latestVXX < 12) estimatedScore = 75;
+    else if (latestVXX > 25) estimatedScore = 20;
+    else estimatedScore = Math.max(10, Math.min(90, 100 - (latestVXX * 3)));
+
+    const status = estimatedScore < 25 ? "EXTREME FEAR" : (estimatedScore < 45 ? "FEAR" : (estimatedScore < 55 ? "NEUTRAL" : (estimatedScore < 75 ? "GREED" : "EXTREME GREED")));
+
+    // 히스토리도 현재 기준 평탄화하여 생성 (오류 방지용)
+    const history = vxxData.map(d => ({ date: d.date, value: estimatedScore }));
+
+    return {
+        current: { value: Math.round(estimatedScore), status: status },
+        history: history
+    };
 }
 
 // --- 분석 로직 ---
@@ -291,6 +323,9 @@ async function initialFullLoad(targetSymbols = CONFIG.symbols) {
             if (cnnRes) {
                 assetStore.fngData = cnnRes.history;
                 renderDashboard(processIntegratedData(), null, cnnRes.current);
+            } else {
+                // 실패 시에도 렌더링 호출하여 LOADING 해제
+                renderDashboard(processIntegratedData());
             }
         }
 
@@ -326,11 +361,6 @@ async function updateLive() {
             });
         }
 
-        if (cnnRes) {
-            assetStore.fngData = cnnRes.history;
-        }
-
-        assetStore.lastUpdate = Date.now();
         saveToLocal();
         globalStrategyResults = processIntegratedData();
         renderDashboard(globalStrategyResults, quotes, cnnRes ? cnnRes.current : null);
