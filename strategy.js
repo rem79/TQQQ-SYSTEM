@@ -109,35 +109,58 @@ async function fetchRealtimeQuotes() {
 }
 
 async function fetchCNNFearAndGreed() {
-    try {
-        const url = `https://api.allorigins.win/get?url=${encodeURIComponent('https://production.dataviz.cnn.io/index/fearandgreed/graphdata/')}`;
-        const response = await fetch(url);
-        const rawData = await response.json();
-        const data = JSON.parse(rawData.contents);
+    // 1단계: 여러 프록시 서버 후보 (CNN API 차단 우회용)
+    const cnnUrl = 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata/';
+    const proxies = [
+        url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+        url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+        url => `https://corsproxy.org/?${encodeURIComponent(url)}`
+    ];
 
-        const current = data.fear_and_greed;
-        const historical = data.fear_and_greed_historical;
+    for (let proxyFn of proxies) {
+        try {
+            const finalUrl = proxyFn(cnnUrl);
+            console.log(`[F&G] Fetching via proxy: ${finalUrl}`);
 
-        const historyList = [];
-        if (historical && historical.timestamp && historical.data) {
-            for (let i = 0; i < historical.timestamp.length; i++) {
-                const dateObj = new Date(historical.timestamp[i]);
-                const dateStr = dateObj.toISOString().split('T')[0];
-                historyList.push({ date: dateStr, value: historical.data[i] });
+            const response = await fetch(finalUrl);
+            if (!response.ok) continue;
+
+            let data = await response.json();
+
+            // 프록시마다 응답 형식이 다름 (contents 필드 유무 등)
+            if (data.contents) {
+                try { data = JSON.parse(data.contents); } catch (e) { /* 이미 객체일 수 있음 */ }
             }
-        }
 
-        return {
-            current: {
-                value: Math.round(current.score),
-                status: current.rating.toUpperCase()
-            },
-            history: historyList
-        };
-    } catch (e) {
-        console.error("CNN F&G load fail:", e);
-        return null;
+            if (data && data.fear_and_greed) {
+                const current = data.fear_and_greed;
+                const historical = data.fear_and_greed_historical;
+
+                const historyList = [];
+                if (historical && historical.timestamp && historical.data) {
+                    for (let i = 0; i < historical.timestamp.length; i++) {
+                        const dateObj = new Date(historical.timestamp[i]);
+                        const dateStr = dateObj.toISOString().split('T')[0];
+                        historyList.push({ date: dateStr, value: Math.round(historical.data[i]) });
+                    }
+                }
+
+                console.log("[F&G] Data loaded successfully!");
+                return {
+                    current: {
+                        value: Math.round(current.score),
+                        status: current.rating.toUpperCase()
+                    },
+                    history: historyList
+                };
+            }
+        } catch (e) {
+            console.warn(`[F&G] Proxy attempt failed:`, e.message);
+        }
     }
+
+    console.error("[F&G] All proxies failed to fetch CNN data.");
+    return null;
 }
 
 // --- 분석 로직 ---
