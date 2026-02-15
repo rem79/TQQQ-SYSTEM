@@ -131,13 +131,12 @@ async function fetchCNNFearAndGreed() {
     const statusEl = document.getElementById('fng-status');
     const sourceEl = document.getElementById('fng-source');
 
-    // 수집 대상 후보 (API 및 메인 페이지)
+    // 수집 대상 후보 (API 중심)
     const targets = [
         { name: 'CNN API', url: 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata/' },
-        { name: 'CNN HTML', url: 'https://edition.cnn.com/markets/fear-and-greed' }
+        { name: 'GitHub Dataset', url: 'https://raw.githubusercontent.com/whit3rabbit/fear-greed-data/master/data/fear-greed-data.json' }
     ];
 
-    // 프록시 서버 목록 (우회 성공률 순)
     const proxies = [
         { name: 'CORSProxy.io', fn: url => `https://corsproxy.io/?${encodeURIComponent(url)}` },
         { name: 'AllOrigins', fn: url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}` },
@@ -152,15 +151,12 @@ async function fetchCNNFearAndGreed() {
             try {
                 if (statusEl) statusEl.innerText = `${target.name}...`;
                 const finalUrl = proxy.fn(target.url);
-
                 const response = await fetchWithTimeout(finalUrl, 8000);
                 if (!response.ok) continue;
 
                 let raw = await response.json();
-                let data = raw.contents || raw; // 프록시 래퍼 처리
-
-                // 1. JSON 형태인 경우 (API 응답)
-                if (typeof data === 'string' && (data.includes('{"fear_and_greed"') || data.startsWith('{'))) {
+                let data = raw.contents || raw;
+                if (typeof data === 'string' && data.startsWith('{')) {
                     try { data = JSON.parse(data); } catch (e) { }
                 }
 
@@ -174,24 +170,8 @@ async function fetchCNNFearAndGreed() {
                         })) : [];
 
                     if (statusEl) statusEl.innerText = "ONLINE";
-                    if (sourceEl) sourceEl.innerText = `출처: CNN Business (via ${proxy.name})`;
+                    if (sourceEl) sourceEl.innerText = `출처: ${target.name} (via ${proxy.name})`;
                     return { current: { value: Math.round(current.score), status: current.rating.toUpperCase() }, history: historyList };
-                }
-
-                // 2. HTML 형태인 경우 (페이지 스크래핑 강화)
-                if (typeof data === 'string' && data.includes('<html')) {
-                    // 방법 A: meta 태그 또는 스크립트 태그 분석
-                    const match = data.match(/"fear_and_greed":\s*\{"score":\s*([\d.]+)/) ||
-                        data.match(/score\\":([\d.]+)/);
-                    if (match && match[1]) {
-                        const score = Math.round(parseFloat(match[1]));
-                        const ratingMatch = data.match(/"rating":\s*"([^"]+)"/) || data.match(/rating\\":\\"([^"\\]+)/);
-                        const rating = ratingMatch ? ratingMatch[1].toUpperCase() : "NEUTRAL";
-
-                        if (statusEl) statusEl.innerText = "ONLINE";
-                        if (sourceEl) sourceEl.innerText = `출처: CNN Markets (Scraped via ${proxy.name})`;
-                        return { current: { value: score, status: rating }, history: [] };
-                    }
                 }
             } catch (e) {
                 console.warn(`[F&G] ${target.name} via ${proxy.name} failed:`, e.message);
@@ -199,9 +179,8 @@ async function fetchCNNFearAndGreed() {
         }
     }
 
-    // 최종 실패
     if (statusEl) statusEl.innerText = "OFFLINE";
-    if (sourceEl) sourceEl.innerText = "CNN 보안 벽이 매우 높습니다. 브라우저에서 직접 CNN(markets/fear-and-greed) 페이지를 한 번 열었다가 닫으신 후 '실시간 갱신'을 눌러보세요.";
+    if (sourceEl) sourceEl.innerText = "공식 API 통신에 실패했습니다. (스크래핑 미사용)";
     return null;
 }
 
