@@ -126,6 +126,25 @@ async function fetchRealtimeQuotes() {
     }
 }
 
+async function fetchMyFearAndGreed() {
+    const url = `https://raw.githubusercontent.com/rem79/fear-greed-index/main/data.json?v=${Date.now()}`;
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Fetch failed");
+        const data = await response.json();
+        if (data && data.stock) {
+            return {
+                value: data.stock.score,
+                status: data.stock.rating.toUpperCase(),
+                date: new Date(data.stock.lastUpdated).toISOString().split('T')[0]
+            };
+        }
+    } catch (e) {
+        console.warn("My F&G Load fail:", e);
+        return null;
+    }
+}
+
 
 // --- 분석 로직 ---
 function calculateSMA(data, period) {
@@ -181,7 +200,8 @@ function processIntegratedData() {
             phase: currentPhase,
             signal: (i > 0 && integrated[i - 1] && currentPhase !== integrated[i - 1].phase) ? (currentPhase === 'LONG' ? 'BUY' : 'SELL') : null,
             SMA100: qs100,
-            SMA200: qs200
+            SMA200: qs200,
+            "공포지수": localStorage.getItem('last_fng_val') || '-'
         };
 
         CONFIG.symbols.forEach(s => {
@@ -249,6 +269,12 @@ async function initialFullLoad(targetSymbols = CONFIG.symbols) {
         }
 
 
+        const fngRes = await fetchMyFearAndGreed();
+        if (fngRes) {
+            localStorage.setItem('last_fng_val', fngRes.value);
+            renderDashboard(globalStrategyResults, null, fngRes);
+        }
+
         assetStore.lastUpdate = Date.now();
         saveToLocal();
         statusEl.innerText = "✅ 데이터 최적화 로드 완료!";
@@ -262,8 +288,9 @@ async function updateLive() {
     if (isLoading) return;
     isLoading = true;
     try {
-        const [quotes] = await Promise.all([
-            fetchRealtimeQuotes()
+        const [quotes, fngRes] = await Promise.all([
+            fetchRealtimeQuotes(),
+            fetchMyFearAndGreed()
         ]);
 
         if (quotes) {
@@ -282,14 +309,14 @@ async function updateLive() {
 
         saveToLocal();
         globalStrategyResults = processIntegratedData();
-        renderDashboard(globalStrategyResults, quotes);
+        renderDashboard(globalStrategyResults, quotes, fngRes);
         updateUpdateDisplay();
     } catch (err) { console.warn("Live Update Fail:", err); }
     finally { isLoading = false; }
 }
 
 // --- UI 렌더링 ---
-function renderDashboard(results, quotes = null) {
+function renderDashboard(results, quotes = null, fng = null) {
     if (!results || results.length === 0) return;
     const latest = results[results.length - 1];
 
@@ -314,6 +341,23 @@ function renderDashboard(results, quotes = null) {
         }
     });
 
+    if (fng) {
+        const fVal = document.getElementById('fng-value');
+        const fStat = document.getElementById('fng-status');
+        if (fVal && fStat) {
+            fVal.innerText = fng.value;
+            fStat.innerText = translateRating(fng.status);
+            const color = fng.value < 25 ? 'var(--fng-fear)' : (fng.value > 75 ? 'var(--fng-greed)' : 'var(--fng-neutral)');
+            fVal.style.color = color;
+            fStat.style.color = color;
+        }
+    }
+
+    function translateRating(rating) {
+        const map = { 'EXTREME FEAR': '극도의 공포', 'FEAR': '공포', 'NEUTRAL': '중립', 'GREED': '탐욕', 'EXTREME GREED': '극도의 탐욕' };
+        return map[rating] || rating;
+    }
+
 
     document.getElementById('current-phase').innerText = latest.phase === 'LONG' ? 'LONG PHASE' : 'HEDGE PHASE';
     document.getElementById('current-phase').className = 'phase-badge ' + (latest.phase === 'LONG' ? 'long-badge' : 'hedge-badge');
@@ -336,6 +380,7 @@ function renderDynamicFullHistory(results) {
         { label: '신호', key: 'signal' },
         { label: 'SMA100', key: 'SMA100' },
         { label: 'SMA200', key: 'SMA200' },
+        { label: '공포지수', key: '공포지수' },
         ...CONFIG.symbols.map(s => ({ label: s, key: s }))
     ];
 
