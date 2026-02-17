@@ -245,14 +245,23 @@ async function startSystem() {
     }
     // 2. API 키가 없는 경우 (방문자 - 공용 데이터 로드 모드)
     else {
+        const updateBtn = document.getElementById('manual-update-btn');
+        if (updateBtn) updateBtn.classList.add('hidden'); // 게스트는 업데이트 버튼 숨김
+
         if (statusEl) statusEl.innerText = "🌐 공용 데이터를 불러오는 중입니다 (조회 전용)...";
         const success = await loadPublicData();
+
         if (success) {
             if (statusEl) statusEl.innerText = "👀 공용 데이터를 통해 히스토리를 불러왔습니다. (Read-Only)";
+            // 게스트 모드에서도 F&G 수집 시도 (공개 API이므로 가능)
+            const fngRes = await fetchMyFearAndGreed();
+            if (fngRes) {
+                renderDashboard(globalStrategyResults, null, fngRes);
+            }
         } else {
             if (statusEl) statusEl.innerText = "🔑 API 키 설정을 완료해 주세요.";
         }
-        checkApiKey();
+        checkApiKey(success); // 데이터 로드 성공 시 경고 숨김
     }
 }
 
@@ -564,7 +573,7 @@ function initSettingsUI() {
     checkApiKey();
 }
 
-function checkApiKey() {
+function checkApiKey(isGuestMode = false) {
     const existingWarning = document.querySelector('.api-warning-bar');
     if (existingWarning) existingWarning.remove();
 
@@ -572,6 +581,10 @@ function checkApiKey() {
 
     if (!CONFIG.apiKey) {
         if (importBtn) importBtn.classList.add('hidden');
+
+        // 데이터 로드에 성공한 게스트 모드라면 경고 바를 띄우지 않음
+        if (isGuestMode) return;
+
         const warning = document.createElement('div');
         warning.className = 'api-warning-bar';
         warning.innerText = "⚠ Twelve Data API 키가 설정되지 않았습니다. 여기를 클릭하여 설정하세요.";
@@ -579,6 +592,8 @@ function checkApiKey() {
         document.body.prepend(warning);
     } else {
         if (importBtn) importBtn.classList.remove('hidden');
+        const updateBtn = document.getElementById('manual-update-btn');
+        if (updateBtn) updateBtn.classList.remove('hidden');
     }
 }
 
