@@ -518,12 +518,17 @@ function checkApiKey() {
     const existingWarning = document.querySelector('.api-warning-bar');
     if (existingWarning) existingWarning.remove();
 
+    const importBtn = document.getElementById('import-btn');
+
     if (!CONFIG.apiKey) {
+        if (importBtn) importBtn.classList.add('hidden');
         const warning = document.createElement('div');
         warning.className = 'api-warning-bar';
         warning.innerText = "⚠ Twelve Data API 키가 설정되지 않았습니다. 여기를 클릭하여 설정하세요.";
         warning.onclick = () => document.getElementById('settings-btn').click();
         document.body.prepend(warning);
+    } else {
+        if (importBtn) importBtn.classList.remove('hidden');
     }
 }
 
