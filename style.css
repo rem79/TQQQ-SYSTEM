@@ -13,9 +13,6 @@
     --accent-gold: #ffd43b;
     --accent-pink: #faa2c1;
     --accent-vix: #748ffc;
-    --fng-fear: #ff4444;
-    --fng-neutral: #fab005;
-    --fng-greed: #00ff77;
     --border-color: #30363d;
 }
 
@@ -151,23 +148,6 @@ header {
     border-left: 4px solid var(--accent-vix);
 }
 
-.fng-border {
-    border-left: 4px solid var(--text-primary);
-}
-
-.fng-value-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin-top: 0.5rem;
-}
-
-.fng-status {
-    font-size: 1.2rem;
-    font-weight: 800;
-    margin-top: -0.5rem;
-    text-transform: uppercase;
-}
 
 .phase-card {
     text-align: center;
