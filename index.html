@@ -32,8 +32,7 @@
                     <i data-lucide="refresh-cw"></i> 실시간 갱신 (크레딧 사용)
                 </button>
                 <div class="last-update">
-                    <div>최근 업데이트: <span id="update-time">-</span></div>
-                    <div class="smart-interval-hint">지능형 갱신 주기: <span id="smart-interval-val">-</span></div>
+                    <span>최근 업데이트: <span id="update-time">-</span></span>
                 </div>
             </div>
         </header>
@@ -172,6 +171,17 @@
             </div>
             <div class="modal-hint">
                 * 키는 브라우저(`localStorage`)에만 안전하게 저장됩니다.
+            </div>
+
+            <!-- GitHub 자동 동기화 설정 (관리자 수동 업데이트용) -->
+            <div class="input-group" style="margin-top: 20px; border-top: 1px dotted #444; padding-top: 15px;">
+                <label style="color: var(--accent-green); font-weight: bold;">GitHub 자동 동기화 (수동 갱신 시 전송)</label>
+                <input type="password" id="github-token-input" placeholder="GitHub PAT (ghp_...)"
+                    style="margin-bottom: 8px;">
+                <input type="text" id="github-repo-input" placeholder="저장소 경로 (예: rem79/TQQQ-SYSTEM)">
+                <div class="modal-hint" style="color: #8b949e; margin-top: 5px;">
+                    * '실시간 갱신' 클릭 시 `data.json`이 서버에 즉시 업데이트됩니다.
+                </div>
             </div>
 
             <div class="modal-actions">

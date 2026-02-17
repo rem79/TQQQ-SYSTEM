@@ -14,20 +14,6 @@ const CONFIG = {
     maxHistoryPoints: 5000
 };
 
-/**
- * 지능형 갱신 주기 계산: (86400초 * 자산수) / 800회 = 108 * N (초)
- */
-function calculateSmartInterval() {
-    const assetCount = CONFIG.symbols.length;
-    const intervalSeconds = Math.ceil((86400 * assetCount) / CONFIG.dailyLimit);
-    CONFIG.updateInterval = intervalSeconds * 1000;
-
-    const intervalMin = (intervalSeconds / 60).toFixed(1);
-    const el = document.getElementById('smart-interval-val');
-    if (el) el.innerText = `약 ${intervalMin}분`;
-    console.log(`[SmartInterval] ${intervalMin} min for ${assetCount} assets.`);
-    return CONFIG.updateInterval;
-}
 
 let assetStore = {
     lastUpdate: 0,
@@ -218,27 +204,15 @@ function processIntegratedData() {
 let mainTimerId = null;
 
 async function startSystem() {
-    if (mainTimerId) clearTimeout(mainTimerId);
-
     const statusEl = document.getElementById('phase-description');
-    calculateSmartInterval();
 
     // 1. API 키가 있는 경우 (사용자님 - 관리자 모드)
     if (CONFIG.apiKey) {
         if (loadFromLocal() && assetStore.data.QQQ) {
-            statusEl.innerText = "📁 로컬 데이터를 불러왔습니다. 업데이트를 확인합니다...";
+            statusEl.innerText = "📁 로컬 데이터를 불러왔습니다.";
             globalStrategyResults = processIntegratedData();
             renderDashboard(globalStrategyResults);
             updateUpdateDisplay();
-
-            const missingSymbols = CONFIG.symbols.filter(s => !assetStore.data[s] || assetStore.data[s].length === 0);
-            if (missingSymbols.length > 0) {
-                await initialFullLoad(missingSymbols);
-            } else {
-                if (Date.now() - assetStore.lastUpdate > CONFIG.updateInterval) {
-                    await updateLive();
-                }
-            }
         } else {
             await initialFullLoad();
         }
@@ -353,6 +327,9 @@ async function updateLive() {
         globalStrategyResults = processIntegratedData();
         renderDashboard(globalStrategyResults, quotes, fngRes);
         updateUpdateDisplay();
+
+        // 관리자 수동 갱신 시 GitHub 서버로 즉시 전송
+        syncToGitHub();
     } catch (err) { console.warn("Live Update Fail:", err); }
     finally { isLoading = false; }
 }
@@ -537,9 +514,15 @@ function initSettingsUI() {
     const saveBtn = document.getElementById('save-key-btn');
     const keyInput = document.getElementById('api-key-input');
 
+    // GitHub 설정 엘리먼트
+    const tokenInput = document.getElementById('github-token-input');
+    const repoInput = document.getElementById('github-repo-input');
+
     if (settingsBtn) {
         settingsBtn.onclick = () => {
             keyInput.value = CONFIG.apiKey;
+            if (tokenInput) tokenInput.value = localStorage.getItem('tqqq_github_token') || '';
+            if (repoInput) repoInput.value = localStorage.getItem('tqqq_github_repo') || '';
             modal.style.display = 'block';
         };
     }
@@ -551,17 +534,21 @@ function initSettingsUI() {
     if (saveBtn) {
         saveBtn.onclick = () => {
             const newKey = keyInput.value.trim();
+            const newToken = tokenInput.value.trim();
+            const newRepo = repoInput.value.trim();
 
             if (newKey) {
                 localStorage.setItem('tqqq_api_key', newKey);
                 CONFIG.apiKey = newKey;
-                modal.style.display = 'none';
-                alert("설정이 저장되었습니다.");
-                startSystem();
-                checkApiKey();
-            } else {
-                alert("키를 입력해주세요.");
             }
+
+            if (newToken) localStorage.setItem('tqqq_github_token', newToken);
+            if (newRepo) localStorage.setItem('tqqq_github_repo', newRepo);
+
+            modal.style.display = 'none';
+            alert("설정이 저장되었습니다.");
+            startSystem();
+            checkApiKey();
         };
     }
     window.onclick = (event) => {
@@ -607,9 +594,6 @@ document.addEventListener('DOMContentLoaded', () => {
         renderDashboard(globalStrategyResults);
     }
 
-    // 시스템 시작 (데이터 로드 및 타이머 설정 포함)
-    runSystemCycle();
-
     // 버튼 이벤트 연결
     document.getElementById('export-btn').onclick = exportData;
     document.getElementById('import-btn').onclick = () => document.getElementById('import-input').click();
@@ -618,17 +602,60 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('toggle-full-history').onclick = () => {
         document.getElementById('full-history-container').classList.toggle('hidden')
     };
+
+    // 페이지 로드 시 즉시 실행
+    startSystem();
 });
 
-/**
- * setInterval 대신 setTimeout을 사용하여 동적인 갱신 간격을 보장합니다.
- */
-let cycleTimerManual = null;
-async function runSystemCycle() {
-    if (cycleTimerManual) clearTimeout(cycleTimerManual);
+// --- GitHub 자동 동기화 로직 ---
+async function syncToGitHub() {
+    const token = localStorage.getItem('tqqq_github_token');
+    const repo = localStorage.getItem('tqqq_github_repo');
+    if (!token || !repo) return;
 
-    await startSystem();
+    console.log("🚀 GitHub로 데이터를 자동 전송합니다...");
+    const path = 'data.json';
+    const url = `https://api.github.com/repos/${repo}/contents/${path}`;
 
-    console.log(`Next update scheduled in ${CONFIG.updateInterval / 1000}s`);
-    cycleTimerManual = setTimeout(runSystemCycle, CONFIG.updateInterval);
+    let sha = '';
+    try {
+        const getRes = await fetch(url, {
+            headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }
+        });
+        if (getRes.ok) {
+            const getData = await getRes.json();
+            sha = getData.sha;
+        }
+    } catch (e) { }
+
+    const backupData = {
+        version: "v4-manual-sync",
+        timestamp: new Date().toISOString(),
+        assetStore: assetStore,
+        strategyResults: globalStrategyResults
+    };
+
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(backupData, null, 2))));
+
+    try {
+        const res = await fetch(url, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${token}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/vnd.github.v3+json'
+            },
+            body: JSON.stringify({
+                message: `Manual-update: ${new Date().toLocaleString()}`,
+                content: content,
+                sha: sha || undefined
+            })
+        });
+
+        if (res.ok) console.log("✅ GitHub 동기화 성공!");
+    } catch (e) {
+        console.error("❌ API 네트워크 오류:", e);
+    }
 }
+
+// 브러우저 자동 순환 갱신 제거됨
