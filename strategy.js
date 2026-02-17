@@ -223,30 +223,64 @@ async function startSystem() {
     const statusEl = document.getElementById('phase-description');
     calculateSmartInterval();
 
-    if (!CONFIG.apiKey) {
-        if (statusEl) statusEl.innerText = "🔑 API 키 설정을 먼저 완료해 주세요.";
-        checkApiKey();
-        return;
-    }
+    // 1. API 키가 있는 경우 (사용자님 - 관리자 모드)
+    if (CONFIG.apiKey) {
+        if (loadFromLocal() && assetStore.data.QQQ) {
+            statusEl.innerText = "📁 로컬 데이터를 불러왔습니다. 업데이트를 확인합니다...";
+            globalStrategyResults = processIntegratedData();
+            renderDashboard(globalStrategyResults);
+            updateUpdateDisplay();
 
-    if (loadFromLocal() && assetStore.data.QQQ) {
-        statusEl.innerText = "📁 로컬 데이터를 불러왔습니다. 부족한 데이터를 보충합니다...";
-        globalStrategyResults = processIntegratedData();
-        renderDashboard(globalStrategyResults);
-        updateUpdateDisplay();
-
-        const missingSymbols = CONFIG.symbols.filter(s => !assetStore.data[s] || assetStore.data[s].length === 0);
-        if (missingSymbols.length > 0) {
-            await initialFullLoad(missingSymbols);
-        } else {
-            // 마지막 업데이트로부터 주기가 지났으면 즉시 실행
-            if (Date.now() - assetStore.lastUpdate > CONFIG.updateInterval) {
-                await updateLive();
+            const missingSymbols = CONFIG.symbols.filter(s => !assetStore.data[s] || assetStore.data[s].length === 0);
+            if (missingSymbols.length > 0) {
+                await initialFullLoad(missingSymbols);
+            } else {
+                if (Date.now() - assetStore.lastUpdate > CONFIG.updateInterval) {
+                    await updateLive();
+                }
             }
+        } else {
+            await initialFullLoad();
         }
-    } else {
-        await initialFullLoad();
     }
+    // 2. API 키가 없는 경우 (방문자 - 공용 데이터 로드 모드)
+    else {
+        if (statusEl) statusEl.innerText = "🌐 공용 데이터를 불러오는 중입니다 (조회 전용)...";
+        const success = await loadPublicData();
+        if (success) {
+            if (statusEl) statusEl.innerText = "👀 공용 데이터를 통해 히스토리를 불러왔습니다. (Read-Only)";
+        } else {
+            if (statusEl) statusEl.innerText = "🔑 API 키 설정을 완료해 주세요.";
+        }
+        checkApiKey();
+    }
+}
+
+// 서버의 data.json을 시도하는 새 함수
+async function loadPublicData() {
+    try {
+        const response = await fetch('./data.json?v=' + Date.now());
+        if (!response.ok) return false;
+
+        const imported = await response.json();
+        const newStore = imported.assetStore || imported;
+
+        if (newStore.data && newStore.data.QQQ) {
+            assetStore = newStore;
+            if (imported.strategyResults) {
+                globalStrategyResults = imported.strategyResults;
+            } else {
+                globalStrategyResults = processIntegratedData();
+            }
+            renderDashboard(globalStrategyResults);
+            updateUpdateDisplay();
+            return true;
+        }
+    } catch (e) {
+        console.warn("Public data not available or error:", e.message);
+        return false;
+    }
+    return false;
 }
 
 async function initialFullLoad(targetSymbols = CONFIG.symbols) {
@@ -437,7 +471,19 @@ function getChartConfig(label, color, displayData, key, s1, s2) {
 }
 
 function exportData() {
-    const dataStr = JSON.stringify(assetStore, null, 2);
+    // 저장할 데이터 패키지 생성 (전체 히스토리 포함)
+    const backupData = {
+        version: "v4-full-history",
+        timestamp: new Date().toISOString(),
+        assetStore: assetStore,
+        strategyResults: globalStrategyResults,
+        config: {
+            symbols: CONFIG.symbols,
+            maxHistoryPoints: CONFIG.maxHistoryPoints
+        }
+    };
+
+    const dataStr = JSON.stringify(backupData, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
     const exportFileDefaultName = `tqqq_system_backup_${new Date().toISOString().slice(0, 10)}.json`;
     const linkElement = document.createElement('a');
@@ -453,13 +499,17 @@ function importData(event) {
     const reader = new FileReader();
     reader.onload = function (e) {
         try {
-            const importedData = JSON.parse(e.target.result);
-            if (!importedData.data || !importedData.data.QQQ) {
+            const imported = JSON.parse(e.target.result);
+            const newStore = imported.assetStore || imported;
+            if (!newStore.data || !newStore.data.QQQ) {
                 throw new Error("유효한 백업 파일이 아닙니다.");
             }
 
             if (confirm("기존 데이터를 덮어씌우고 백업 파일을 불러오시겠습니까?")) {
-                assetStore = importedData;
+                assetStore = newStore;
+                if (imported.strategyResults) {
+                    globalStrategyResults = imported.strategyResults;
+                }
                 saveToLocal();
                 alert("데이터 복구 성공! 화면을 새로고침합니다.");
                 window.location.reload();
