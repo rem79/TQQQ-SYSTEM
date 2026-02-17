@@ -1,0 +1,33 @@
+name: Auto Data Update
+
+on:
+  schedule:
+    - cron: '0 * * * *' # 매 시간 0분에 실행
+  workflow_dispatch: # 수동 실행 보 버튼 활성화
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Run data update script
+        env:
+          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+        run: node scraper.js
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add data.json
+          git commit -m "Auto-update: data.json [$(date)]" || echo "No changes to commit"
+          git push

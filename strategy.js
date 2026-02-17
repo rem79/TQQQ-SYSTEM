@@ -349,14 +349,10 @@ async function updateLive() {
                 }
             });
         }
-
         saveToLocal();
         globalStrategyResults = processIntegratedData();
         renderDashboard(globalStrategyResults, quotes, fngRes);
         updateUpdateDisplay();
-
-        // 데이터 갱신 후 GitHub 서버로 자동 전송 (동기화)
-        syncToGitHub();
     } catch (err) { console.warn("Live Update Fail:", err); }
     finally { isLoading = false; }
 }
@@ -541,15 +537,9 @@ function initSettingsUI() {
     const saveBtn = document.getElementById('save-key-btn');
     const keyInput = document.getElementById('api-key-input');
 
-    // GitHub 설정 엘리먼트
-    const tokenInput = document.getElementById('github-token-input');
-    const repoInput = document.getElementById('github-repo-input');
-
     if (settingsBtn) {
         settingsBtn.onclick = () => {
             keyInput.value = CONFIG.apiKey;
-            if (tokenInput) tokenInput.value = localStorage.getItem('tqqq_github_token') || '';
-            if (repoInput) repoInput.value = localStorage.getItem('tqqq_github_repo') || '';
             modal.style.display = 'block';
         };
     }
@@ -561,24 +551,19 @@ function initSettingsUI() {
     if (saveBtn) {
         saveBtn.onclick = () => {
             const newKey = keyInput.value.trim();
-            const newToken = tokenInput.value.trim();
-            const newRepo = repoInput.value.trim();
 
             if (newKey) {
                 localStorage.setItem('tqqq_api_key', newKey);
                 CONFIG.apiKey = newKey;
+                modal.style.display = 'none';
+                alert("설정이 저장되었습니다.");
+                startSystem();
+                checkApiKey();
+            } else {
+                alert("키를 입력해주세요.");
             }
-
-            if (newToken) localStorage.setItem('tqqq_github_token', newToken);
-            if (newRepo) localStorage.setItem('tqqq_github_repo', newRepo);
-
-            modal.style.display = 'none';
-            alert("설정이 저장되었습니다.");
-            startSystem();
-            checkApiKey();
         };
     }
-
     window.onclick = (event) => {
         if (event.target == modal) modal.style.display = 'none';
     };
@@ -587,7 +572,7 @@ function initSettingsUI() {
     checkApiKey();
 }
 
-function checkApiKey(isGuestMode = false) {
+function checkApiKey(isPublicMode = false) {
     const existingWarning = document.querySelector('.api-warning-bar');
     if (existingWarning) existingWarning.remove();
 
@@ -596,8 +581,8 @@ function checkApiKey(isGuestMode = false) {
     if (!CONFIG.apiKey) {
         if (importBtn) importBtn.classList.add('hidden');
 
-        // 데이터 로드에 성공한 게스트 모드라면 경고 바를 띄우지 않음
-        if (isGuestMode) return;
+        // 데이터 로드에 성공한 공용 모드라면 경고 바를 띄우지 않음
+        if (isPublicMode) return;
 
         const warning = document.createElement('div');
         warning.className = 'api-warning-bar';
@@ -631,67 +616,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('import-input').onchange = importData;
     document.getElementById('manual-update-btn').onclick = updateLive;
     document.getElementById('toggle-full-history').onclick = () => {
-        document.getElementById('full-history-container').classList.toggle('hidden');
+        document.getElementById('full-history-container').classList.toggle('hidden')
     };
 });
-
-// --- GitHub 자동 동기화 로직 ---
-async function syncToGitHub() {
-    const token = localStorage.getItem('tqqq_github_token');
-    const repo = localStorage.getItem('tqqq_github_repo');
-    if (!token || !repo) return;
-
-    console.log("🚀 GitHub로 데이터를 자동 전송합니다...");
-    const path = 'data.json';
-    const url = `https://api.github.com/repos/${repo}/contents/${path}`;
-
-    // 1. 기존 파일의 SHA 필요 (파일 덮어쓰기 위해)
-    let sha = '';
-    try {
-        const getRes = await fetch(url, {
-            headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }
-        });
-        if (getRes.ok) {
-            const getData = await getRes.json();
-            sha = getData.sha;
-        }
-    } catch (e) {
-        console.warn("SHA fetch failed (first commit?):", e.message);
-    }
-
-    // 2. 새로운 데이터 패키지 생성
-    const backupData = {
-        version: "v4-auto-sync",
-        timestamp: new Date().toISOString(),
-        assetStore: assetStore,
-        strategyResults: globalStrategyResults
-    };
-
-    // UTF-8 문자열을 Base64로 인코딩 (GitHub API 요구사항)
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify(backupData, null, 2))));
-
-    // 3. GitHub API로 커밋 (PUT)
-    try {
-        const res = await fetch(url, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `token ${token}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/vnd.github.v3+json'
-            },
-            body: JSON.stringify({
-                message: `Auto-update: ${new Date().toLocaleString()}`,
-                content: content,
-                sha: sha || undefined
-            })
-        });
-
-        if (res.ok) console.log("✅ GitHub 동기화 성공!");
-        else console.error("❌ GitHub 동기화 실패:", await res.text());
-    } catch (e) {
-        console.error("❌ API 네트워크 오류:", e);
-    }
-}
 
 /**
  * setInterval 대신 setTimeout을 사용하여 동적인 갱신 간격을 보장합니다.
