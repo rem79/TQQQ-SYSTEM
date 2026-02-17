@@ -173,6 +173,18 @@
             <div class="modal-hint">
                 * 키는 브라우저(`localStorage`)에만 안전하게 저장됩니다.
             </div>
+
+            <!-- GitHub 자동 동기화 설정 (관리자용) -->
+            <div class="input-group" style="margin-top: 20px; border-top: 1px dotted #444; padding-top: 15px;">
+                <label style="color: var(--accent-green); font-weight: bold;">GitHub 자동 동기화 (관리자 전용)</label>
+                <input type="password" id="github-token-input" placeholder="GitHub PAT (ghp_...)"
+                    style="margin-bottom: 8px;">
+                <input type="text" id="github-repo-input" placeholder="저장소 경로 (예: rem79/TQQQ-SYSTEM)">
+                <div class="modal-hint" style="color: #8b949e; margin-top: 5px;">
+                    * 설정을 완료하면 업데이트 시 `data.json`이 서버에 자동 푸시됩니다.
+                </div>
+            </div>
+
             <div class="modal-actions">
                 <button id="save-key-btn" class="btn btn-primary">저장하기</button>
                 <button id="close-settings-btn" class="btn btn-secondary">닫기</button>
