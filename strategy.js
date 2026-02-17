@@ -380,7 +380,6 @@ function renderDynamicFullHistory(results) {
         { label: '신호', key: 'signal' },
         { label: 'SMA100', key: 'SMA100' },
         { label: 'SMA200', key: 'SMA200' },
-        { label: '공포지수', key: '공포지수' },
         ...CONFIG.symbols.map(s => ({ label: s, key: s }))
     ];
 
