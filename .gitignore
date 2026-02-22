@@ -3,6 +3,7 @@
 # API 및 데이터 관련 (보안)
 *.json
 !package.json
+!data.json
 
 # 로그 및 OS 관련
 *.log
