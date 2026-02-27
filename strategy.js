@@ -121,12 +121,31 @@ async function fetchMyFearAndGreed() {
         if (data && data.stock) {
             return {
                 value: data.stock.score,
-                status: data.stock.rating.toUpperCase(),
+                status: (data.stock.rating || 'neutral').toUpperCase(),
                 date: new Date(data.stock.lastUpdated).toISOString().split('T')[0]
             };
         }
     } catch (e) {
-        console.warn("My F&G Load fail:", e);
+        console.warn("Stock F&G Load fail:", e);
+        return null;
+    }
+}
+
+async function fetchCryptoFearAndGreed() {
+    try {
+        const response = await fetch('https://api.alternative.me/fng/');
+        if (!response.ok) throw new Error("Fetch failed");
+        const data = await response.json();
+        if (data && data.data && data.data[0]) {
+            const item = data.data[0];
+            return {
+                value: parseInt(item.value),
+                status: item.value_classification.toUpperCase(),
+                date: new Date(parseInt(item.timestamp) * 1000).toISOString().split('T')[0]
+            };
+        }
+    } catch (e) {
+        console.warn("Crypto F&G Load fail:", e);
         return null;
     }
 }
@@ -257,6 +276,12 @@ async function loadPublicData() {
             }
             renderDashboard(globalStrategyResults);
             updateUpdateDisplay();
+
+            // 공용 모드인 경우에도 10분 타이머 시작
+            startRealtimeTimer();
+            if (document.getElementById('realtime-status')) {
+                document.getElementById('realtime-status').classList.remove('hidden');
+            }
             return true;
         }
     } catch (e) {
@@ -264,6 +289,30 @@ async function loadPublicData() {
         return false;
     }
     return false;
+}
+
+// --- 실시간 자동 갱신 로직 (10분 주기) ---
+let refreshTimer = 600;
+let refreshIntervalId = null;
+
+function startRealtimeTimer() {
+    if (refreshIntervalId) clearInterval(refreshIntervalId);
+    refreshTimer = 600;
+
+    refreshIntervalId = setInterval(() => {
+        refreshTimer--;
+        const mins = Math.floor(refreshTimer / 60);
+        const secs = refreshTimer % 60;
+        const display = `${mins}:${secs.toString().padStart(2, '0')}`;
+        const counterEl = document.getElementById('refresh-countdown');
+        if (counterEl) counterEl.innerText = display;
+
+        if (refreshTimer <= 0) {
+            console.log("⏰ 10분 주기 자동 갱신 실행...");
+            updateLive();
+            refreshTimer = 600;
+        }
+    }, 1000);
 }
 
 async function initialFullLoad(targetSymbols = CONFIG.symbols) {
@@ -296,6 +345,10 @@ async function initialFullLoad(targetSymbols = CONFIG.symbols) {
         saveToLocal();
         statusEl.innerText = "✅ 데이터 최적화 로드 완료!";
         updateUpdateDisplay();
+        startRealtimeTimer(); // 타이머 시작
+        if (document.getElementById('realtime-status')) {
+            document.getElementById('realtime-status').classList.remove('hidden');
+        }
     } catch (err) {
         statusEl.innerText = `❌ 로딩 지연 발생: ${err.message}`;
     } finally { isLoading = false; }
@@ -305,9 +358,10 @@ async function updateLive() {
     if (isLoading) return;
     isLoading = true;
     try {
-        const [quotes, fngRes] = await Promise.all([
+        const [quotes, fngRes, cryptoFngRes] = await Promise.all([
             fetchRealtimeQuotes(),
-            fetchMyFearAndGreed()
+            fetchMyFearAndGreed(),
+            fetchCryptoFearAndGreed()
         ]);
 
         if (quotes) {
@@ -323,21 +377,31 @@ async function updateLive() {
                 }
             });
         }
+
+        assetStore.lastUpdate = Date.now();
         saveToLocal();
         globalStrategyResults = processIntegratedData();
-        renderDashboard(globalStrategyResults, quotes, fngRes);
+        renderDashboard(globalStrategyResults, quotes, fngRes, cryptoFngRes);
         updateUpdateDisplay();
 
-        // 관리자 수동 갱신 시 GitHub 서버로 즉시 전송
         syncToGitHub();
+        startRealtimeTimer(); // 갱신 후 타이머 리셋
     } catch (err) { console.warn("Live Update Fail:", err); }
     finally { isLoading = false; }
 }
 
 // --- UI 렌더링 ---
-function renderDashboard(results, quotes = null, fng = null) {
+function renderDashboard(results, quotes = null, fng = null, cryptoFng = null) {
     if (!results || results.length === 0) return;
     const latest = results[results.length - 1];
+
+    if (!cryptoFng) {
+        fetchCryptoFearAndGreed().then(res => {
+            if (res) updateFngGauge('crypto', res);
+        });
+    } else {
+        updateFngGauge('crypto', cryptoFng);
+    }
 
     CONFIG.symbols.forEach(s => {
         const price = (quotes && quotes[s]) ? parseFloat(quotes[s].close) : latest[s];
@@ -361,19 +425,52 @@ function renderDashboard(results, quotes = null, fng = null) {
     });
 
     if (fng) {
-        const fVal = document.getElementById('fng-value');
-        const fStat = document.getElementById('fng-status');
-        if (fVal && fStat) {
-            fVal.innerText = fng.value;
-            fStat.innerText = translateRating(fng.status);
-            const color = fng.value < 25 ? 'var(--fng-fear)' : (fng.value > 75 ? 'var(--fng-greed)' : 'var(--fng-neutral)');
-            fVal.style.color = color;
-            fStat.style.color = color;
+        updateFngGauge('stock', fng);
+    }
+
+    function updateFngGauge(type, data) {
+        const valEl = document.getElementById(type === 'stock' ? 'fng-value' : 'crypto-fng-value');
+        const statEl = document.getElementById(type === 'stock' ? 'fng-status' : 'crypto-fng-status');
+        const needleEl = document.getElementById(type === 'stock' ? 'stock-needle' : 'crypto-needle');
+        const pathEl = document.getElementById(type === 'stock' ? 'stock-gauge-path' : 'crypto-gauge-path');
+
+        if (!valEl || !statEl) return;
+
+        const val = data.value;
+        valEl.innerText = val;
+        statEl.innerText = translateRating(data.status);
+
+        // 색상 결정
+        let color = 'var(--fng-neutral)';
+        if (val <= 25) color = 'var(--fng-extreme-fear)';
+        else if (val <= 44) color = 'var(--fng-fear)';
+        else if (val >= 75) color = 'var(--fng-extreme-greed)';
+        else if (val >= 56) color = 'var(--fng-greed)';
+
+        valEl.style.color = color;
+        statEl.style.color = color;
+
+        // 바늘 회전 (0~100 -> -90~90도)
+        const rotation = (val / 100) * 180 - 90;
+        if (needleEl) needleEl.style.transform = `translateX(-50%) rotate(${rotation}deg)`;
+
+        // 게이지 패스 업데이트 (stroke-dashoffset)
+        // 전체 길이 251.3 (Half circumference of r=80) 
+        if (pathEl) {
+            const offset = 251.3 - (val / 100) * 251.3;
+            pathEl.style.strokeDashoffset = offset;
+            pathEl.style.stroke = color;
         }
     }
 
     function translateRating(rating) {
-        const map = { 'EXTREME FEAR': '극도의 공포', 'FEAR': '공포', 'NEUTRAL': '중립', 'GREED': '탐욕', 'EXTREME GREED': '극도의 탐욕' };
+        const map = {
+            'EXTREME FEAR': '극도의 공포',
+            'FEAR': '공포',
+            'NEUTRAL': '중립',
+            'GREED': '탐욕',
+            'EXTREME GREED': '극도의 탐욕'
+        };
         return map[rating] || rating;
     }
 

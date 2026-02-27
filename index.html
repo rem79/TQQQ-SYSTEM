@@ -28,11 +28,17 @@
                     <i data-lucide="upload"></i> 복구
                 </button>
                 <input type="file" id="import-input" accept=".json" style="display: none;">
+                <div id="realtime-status" class="badge-container hidden">
+                    <span class="badge badge-realtime">
+                        <span class="pulse-dot"></span> 실시간 데이터
+                    </span>
+                    <span id="refresh-countdown" class="countdown">10:00</span>
+                </div>
                 <button id="manual-update-btn" class="btn btn-primary">
-                    <i data-lucide="refresh-cw"></i> 실시간 갱신 (크레딧 사용)
+                    <i data-lucide="refresh-cw"></i> 데이터 갱신
                 </button>
                 <div class="last-update">
-                    <span>최근 업데이트: <span id="update-time">-</span></span>
+                    <span>최종 업데이트: <span id="update-time">-</span></span>
                 </div>
             </div>
         </header>
@@ -85,10 +91,32 @@
                     <div class="change-info" id="vix-status">VIX 대체 ETF 기반 측정</div>
                 </div>
                 <div class="card price-card fng-border" id="fng-card">
-                    <h3>시장 심리 (Fear & Greed)</h3>
-                    <div class="fng-gauge-container">
-                        <div class="fng-score" id="fng-value">-</div>
+                    <h3>공포와 탐욕 지수 (Stock)</h3>
+                    <div class="gauge-wrapper">
+                        <div class="gauge-container" id="stock-gauge">
+                            <svg class="gauge-svg" viewBox="0 0 200 120">
+                                <path class="gauge-bg" d="M20,100 A80,80 0 0,1 180,100" />
+                                <path class="gauge-active" id="stock-gauge-path" d="M20,100 A80,80 0 0,1 180,100" />
+                            </svg>
+                            <div class="gauge-needle" id="stock-needle"></div>
+                            <div class="gauge-value" id="fng-value">-</div>
+                        </div>
                         <div class="fng-status" id="fng-status">LOADING</div>
+                    </div>
+                </div>
+
+                <div class="card price-card crypto-border" id="crypto-fng-card">
+                    <h3>공포와 탐욕 지수 (Crypto)</h3>
+                    <div class="gauge-wrapper">
+                        <div class="gauge-container" id="crypto-gauge">
+                            <svg class="gauge-svg" viewBox="0 0 200 120">
+                                <path class="gauge-bg" d="M20,100 A80,80 0 0,1 180,100" />
+                                <path class="gauge-active" id="crypto-gauge-path" d="M20,100 A80,80 0 0,1 180,100" />
+                            </svg>
+                            <div class="gauge-needle" id="crypto-needle"></div>
+                            <div class="gauge-value" id="crypto-fng-value">-</div>
+                        </div>
+                        <div class="fng-status" id="crypto-fng-status">LOADING</div>
                     </div>
                 </div>
             </section>

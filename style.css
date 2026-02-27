@@ -13,10 +13,12 @@
     --accent-gold: #ffd43b;
     --accent-pink: #faa2c1;
     --accent-vix: #748ffc;
-    --fng-fear: #ff4444;
-    --fng-neutral: #fab005;
-    --fng-greed: #00ff77;
     --border-color: #30363d;
+    --fng-extreme-fear: #ff4d4d;
+    --fng-fear: #ff944d;
+    --fng-neutral: #ffd43b;
+    --fng-greed: #a9e34b;
+    --fng-extreme-greed: #51cf66;
 }
 
 * {
@@ -152,6 +154,11 @@ header {
 }
 
 .fng-border {
+    border-left: 4px solid var(--accent-blue);
+    background: linear-gradient(145deg, #1c2128, #161b22);
+}
+
+.crypto-border {
     border-left: 4px solid var(--accent-orange);
     background: linear-gradient(145deg, #1c2128, #161b22);
 }
@@ -173,10 +180,142 @@ header {
 }
 
 .fng-status {
-    font-size: 1.1rem;
+    font-size: 1rem;
     font-weight: 800;
-    letter-spacing: 1px;
-    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: -10px;
+    z-index: 5;
+}
+
+/* Gauge Styles */
+.gauge-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    position: relative;
+}
+
+.gauge-container {
+    position: relative;
+    width: 200px;
+    height: 120px;
+}
+
+.gauge-svg {
+    width: 100%;
+    height: 100%;
+}
+
+.gauge-bg {
+    fill: none;
+    stroke: #21262d;
+    stroke-width: 15;
+    stroke-linecap: round;
+}
+
+.gauge-active {
+    fill: none;
+    stroke: var(--accent-blue);
+    stroke-width: 15;
+    stroke-linecap: round;
+    stroke-dasharray: 251.3;
+    /* Half circumference of r=80 */
+    stroke-dashoffset: 251.3;
+    transition: stroke-dashoffset 1s ease-out, stroke 1s ease;
+}
+
+.gauge-needle {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    width: 4px;
+    height: 70px;
+    background: #fff;
+    border-radius: 4px;
+    transform-origin: bottom center;
+    transform: translateX(-50%) rotate(-90deg);
+    transition: transform 1s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 2;
+}
+
+.gauge-needle::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 50%;
+    width: 12px;
+    height: 12px;
+    background: #fff;
+    border-radius: 50%;
+    transform: translateX(-50%);
+}
+
+.gauge-value {
+    position: absolute;
+    bottom: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 2rem;
+    font-weight: 900;
+    color: #fff;
+}
+
+.crypto-border {
+    border-left: 4px solid var(--accent-orange);
+}
+
+/* Real-time Status Badge */
+.badge-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.badge-realtime {
+    background: rgba(0, 255, 119, 0.1);
+    color: var(--accent-green);
+    border: 1px solid rgba(0, 255, 119, 0.3);
+}
+
+.pulse-dot {
+    width: 8px;
+    height: 8px;
+    background-color: var(--accent-green);
+    border-radius: 50%;
+    box-shadow: 0 0 0 rgba(0, 255, 119, 0.4);
+    animation: dot-pulse 2s infinite;
+}
+
+@keyframes dot-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(0, 255, 119, 0.7);
+    }
+
+    70% {
+        box-shadow: 0 0 0 10px rgba(0, 255, 119, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(0, 255, 119, 0);
+    }
+}
+
+.countdown {
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
 }
 
 
