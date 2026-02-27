@@ -51,6 +51,36 @@
                     <div class="phase-badge" id="current-phase">데이터 로딩 중...</div>
                     <p class="phase-desc" id="phase-description">-</p>
                 </div>
+                <div class="card price-card fng-border" id="fng-card">
+                    <h3>공포와 탐욕 지수 (Stock)</h3>
+                    <div class="gauge-wrapper">
+                        <div class="gauge-container" id="stock-gauge">
+                            <svg class="gauge-svg" viewBox="0 0 200 120">
+                                <path class="gauge-bg" d="M20,100 A80,80 0 0,1 180,100" />
+                                <path class="gauge-active" id="stock-gauge-path" d="M20,100 A80,80 0 0,1 180,100" />
+                            </svg>
+                            <div class="gauge-needle" id="stock-needle"></div>
+                            <div class="gauge-value" id="fng-value">-</div>
+                        </div>
+                        <div class="fng-status" id="fng-status">LOADING</div>
+                    </div>
+                </div>
+
+                <div class="card price-card crypto-border" id="crypto-fng-card">
+                    <h3>공포와 탐욕 지수 (Crypto)</h3>
+                    <div class="gauge-wrapper">
+                        <div class="gauge-container" id="crypto-gauge">
+                            <svg class="gauge-svg" viewBox="0 0 200 120">
+                                <path class="gauge-bg" d="M20,100 A80,80 0 0,1 180,100" />
+                                <path class="gauge-active" id="crypto-gauge-path" d="M20,100 A80,80 0 0,1 180,100" />
+                            </svg>
+                            <div class="gauge-needle" id="crypto-needle"></div>
+                            <div class="gauge-value" id="crypto-fng-value">-</div>
+                        </div>
+                        <div class="fng-status" id="crypto-fng-status">LOADING</div>
+                    </div>
+                </div>
+
                 <div class="card price-card tqqq-border">
                     <h3>TQQQ 현재가 (투자)</h3>
                     <div class="price-value" id="tqqq-price">$ -</div>
@@ -89,35 +119,6 @@
                     <h3>VXX (변동성 지표)</h3>
                     <div class="price-value" id="vix-price">-</div>
                     <div class="change-info" id="vix-status">VIX 대체 ETF 기반 측정</div>
-                </div>
-                <div class="card price-card fng-border" id="fng-card">
-                    <h3>공포와 탐욕 지수 (Stock)</h3>
-                    <div class="gauge-wrapper">
-                        <div class="gauge-container" id="stock-gauge">
-                            <svg class="gauge-svg" viewBox="0 0 200 120">
-                                <path class="gauge-bg" d="M20,100 A80,80 0 0,1 180,100" />
-                                <path class="gauge-active" id="stock-gauge-path" d="M20,100 A80,80 0 0,1 180,100" />
-                            </svg>
-                            <div class="gauge-needle" id="stock-needle"></div>
-                            <div class="gauge-value" id="fng-value">-</div>
-                        </div>
-                        <div class="fng-status" id="fng-status">LOADING</div>
-                    </div>
-                </div>
-
-                <div class="card price-card crypto-border" id="crypto-fng-card">
-                    <h3>공포와 탐욕 지수 (Crypto)</h3>
-                    <div class="gauge-wrapper">
-                        <div class="gauge-container" id="crypto-gauge">
-                            <svg class="gauge-svg" viewBox="0 0 200 120">
-                                <path class="gauge-bg" d="M20,100 A80,80 0 0,1 180,100" />
-                                <path class="gauge-active" id="crypto-gauge-path" d="M20,100 A80,80 0 0,1 180,100" />
-                            </svg>
-                            <div class="gauge-needle" id="crypto-needle"></div>
-                            <div class="gauge-value" id="crypto-fng-value">-</div>
-                        </div>
-                        <div class="fng-status" id="crypto-fng-status">LOADING</div>
-                    </div>
                 </div>
             </section>
 
