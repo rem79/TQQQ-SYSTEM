@@ -409,12 +409,24 @@ function renderDashboard(results, quotes = null, fng = null, cryptoFng = null) {
         } else {
             const priceEl = document.getElementById(`${s.toLowerCase()}-price`);
             if (priceEl) priceEl.innerText = `$${price.toFixed(2)}`;
+
+            // 등락률 표시 개선: quotes가 없으면 히스토리로부터 계산
+            let changePercent = null;
             if (quotes && quotes[s]) {
+                changePercent = parseFloat(quotes[s].percent_change) || 0;
+            } else if (results.length >= 2) {
+                const currentPrice = price;
+                const prevPrice = results[results.length - 2][s];
+                if (currentPrice && prevPrice) {
+                    changePercent = ((currentPrice - prevPrice) / prevPrice) * 100;
+                }
+            }
+
+            if (changePercent !== null) {
                 const changeEl = document.getElementById(`${s.toLowerCase()}-change`);
                 if (changeEl) {
-                    const c = parseFloat(quotes[s].percent_change) || 0;
-                    changeEl.innerText = `${c >= 0 ? '+' : ''}${c.toFixed(2)}%`;
-                    changeEl.className = c >= 0 ? 'favorable' : 'unfavorable';
+                    changeEl.innerText = `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%`;
+                    changeEl.className = changePercent >= 0 ? 'favorable' : 'unfavorable';
                 }
             }
         }
