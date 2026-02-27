@@ -9,8 +9,41 @@ const CONFIG = {
     symbols: ['QQQ', 'TQQQ', 'SPY', 'DIA', 'GLD', 'TLT', 'VXX'],
     shortPeriod: 100,
     longPeriod: 200,
-    maxHistoryPoints: 5000
+    maxHistoryPoints: 5000,
+    discordWebhookUrl: process.env.DISCORD_WEBHOOK_URL
 };
+
+async function sendDiscordNotification(currentPhase, previousPhase, qPrice) {
+    if (!CONFIG.discordWebhookUrl) return;
+
+    // 페이즈가 변한 경우에만 알림 전송
+    if (currentPhase === previousPhase) return;
+
+    console.log(`🔔 페이즈 변화 감지: ${previousPhase} -> ${currentPhase}. 디스코드 알림을 전송합니다.`);
+
+    const message = {
+        username: "TQQQ SYSTEM",
+        avatar_url: "https://cdn-icons-png.flaticon.com/512/2502/2502164.png",
+        embeds: [{
+            title: `🚨 전략 페이즈 전환: ${previousPhase} ➔ ${currentPhase}`,
+            description: `**현재 시각:** ${new Date().toLocaleString('ko-KR')}\n**QQQ 현재가:** $${qPrice.toFixed(2)}\n\n**매매 신호:** ${currentPhase === 'LONG' ? '✅ TQQQ 풀매수 시작' : '🛡️ 전량 매도 및 현금화'}`,
+            color: currentPhase === 'LONG' ? 3066993 : 15158332, // LONG: 녹색, HEDGE: 빨간색
+            footer: { text: "TQQQ System Automated Alert" },
+            timestamp: new Date().toISOString()
+        }]
+    };
+
+    try {
+        await fetch(CONFIG.discordWebhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(message)
+        });
+        console.log("✅ 디스코드 알림 전송 성공!");
+    } catch (e) {
+        console.error("❌ 디스코드 알림 실패:", e.message);
+    }
+}
 
 async function fetchData() {
     console.log("🚀 데이터 업데이트 시작...");
@@ -64,7 +97,24 @@ async function fetchData() {
     }
 
     // 3. 전략 분석 실행
+    // 이전 데이터 로드 (페이즈 변화 감지용)
+    let previousData = null;
+    try {
+        if (fs.existsSync('data.json')) {
+            const oldContent = JSON.parse(fs.readFileSync('data.json', 'utf8'));
+            if (oldContent.strategyResults && oldContent.strategyResults.length > 0) {
+                previousData = oldContent.strategyResults[oldContent.strategyResults.length - 1];
+            }
+        }
+    } catch (e) { console.warn("이전 데이터 로드 실패 (첫 실행으로 간주)"); }
+
     const strategyResults = processIntegratedData(assetStore, fngScore);
+    const latestResult = strategyResults[strategyResults.length - 1];
+
+    // 페이즈 변화 체크 및 알림
+    if (previousData && latestResult && previousData.phase !== latestResult.phase) {
+        await sendDiscordNotification(latestResult.phase, previousData.phase, latestResult.QQQ);
+    }
 
     // 4. data.json 파일 저장
     const finalData = {
