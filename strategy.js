@@ -246,11 +246,10 @@ async function startSystem() {
 
         if (success) {
             if (statusEl) statusEl.innerText = "👀 공용 데이터를 통해 히스토리를 불러왔습니다. (Read-Only)";
-            // 게스트 모드에서도 F&G 수집 시도 (공개 API이므로 가능)
+            // 게스트 모드에서도 F&G 수집 시도
             const fngRes = await fetchMyFearAndGreed();
-            if (fngRes) {
-                renderDashboard(globalStrategyResults, null, fngRes);
-            }
+            const cryptoFngRes = await fetchCryptoFearAndGreed();
+            renderDashboard(globalStrategyResults, null, fngRes, cryptoFngRes);
         } else {
             if (statusEl) statusEl.innerText = "🔑 API 키 설정을 완료해 주세요.";
         }
@@ -334,12 +333,9 @@ async function initialFullLoad(targetSymbols = CONFIG.symbols) {
             await new Promise(r => setTimeout(r, 2000));
         }
 
-
         const fngRes = await fetchMyFearAndGreed();
-        if (fngRes) {
-            localStorage.setItem('last_fng_val', fngRes.value);
-            renderDashboard(globalStrategyResults, null, fngRes);
-        }
+        const cryptoFngRes = await fetchCryptoFearAndGreed();
+        renderDashboard(globalStrategyResults, null, fngRes, cryptoFngRes);
 
         assetStore.lastUpdate = Date.now();
         saveToLocal();
@@ -688,7 +684,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (loadFromLocal()) {
         console.log("Local data loaded.");
         globalStrategyResults = processIntegratedData();
-        renderDashboard(globalStrategyResults);
+        // 초기 로드 시에도 F&G 시도
+        Promise.all([fetchMyFearAndGreed(), fetchCryptoFearAndGreed()]).then(([fng, crypto]) => {
+            renderDashboard(globalStrategyResults, null, fng, crypto);
+        });
     }
 
     // 버튼 이벤트 연결
